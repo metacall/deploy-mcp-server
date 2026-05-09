@@ -26,7 +26,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server impleme
 │      Protocol Client       │
 │  (metacall/protocol API)   │
 └─────────────┬──────────────┘
-              │ (Axios REST)
+              │ (Fetch REST)
               ▼
 ┌────────────────────────────┐
 │        MetaCall FaaS       │
@@ -105,13 +105,13 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server impleme
 First, clone this repository to your local machine, install the dependencies, and compile the TypeScript code:
 
 ```bash
-git clone https://github.com/Somsubhra-Nandi/metacall-mcp-server.git
-cd metacall-mcp-server
+git clone https://github.com/metacall/deploy-mcp-server.git
+cd deploy-mcp-server
 npm install
 npm run build
 ```
 
-> **Note:** Get the absolute path of your `metacall-mcp-server/dist/index.js` file as we will need it for the client configuration.
+> **Note:** Get the absolute path of your `deploy-mcp-server/dist/index.js` file as we will need it for the client configuration.
 
 ---
 
@@ -136,7 +136,7 @@ The Model Context Protocol (MCP) allows us to use this server across various AI 
     "metacall-faas": {
       "command": "node",
       "args": [
-        "/ABSOLUTE/PATH/TO/metacall-mcp-server/dist/index.js"
+        "/ABSOLUTE/PATH/TO/deploy-mcp-server/dist/index.js"
       ],
       "env": {
         "METACALL_TOKEN": "your_jwt_token_here",
@@ -147,7 +147,7 @@ The Model Context Protocol (MCP) allows us to use this server across various AI 
 }
 ```
 
-> **Windows Users:** Remember to use double backslashes. e.g., `C:\\Users\\Name\\metacall-mcp-server\\dist\\index.js`
+> **Windows Users:** Remember to use double backslashes. e.g., `C:\\Users\\Name\\deploy-mcp-server\\dist\\index.js`
 
 3. Restart Claude Desktop.
 
@@ -167,7 +167,7 @@ The Model Context Protocol (MCP) allows us to use this server across various AI 
     "metacall-faas": {
       "command": "node",
       "args": [
-        "/ABSOLUTE/PATH/TO/metacall-mcp-server/dist/index.js"
+        "/ABSOLUTE/PATH/TO/deploy-mcp-server/dist/index.js"
       ],
       "env": {
         "METACALL_TOKEN": "your_jwt_token_here",
