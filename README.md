@@ -1,6 +1,6 @@
-# MetaCall MCP Server
+# MetaCall Deploy MCP Server
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server implemented in TypeScript on top of the `metacall/protocol` API. It exposes the complete MetaCall FaaS surface as MCP tools.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server implemented in TypeScript on top of the [`metacall/protocol`](https://github.com/metacall/protocol) API. It exposes the complete [MetaCall FaaS](https://dashboard.metacall.io) surface as MCP tools.
 
 ---
 
