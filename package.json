@@ -10,12 +10,13 @@
     "test": "npm run --silent build && mocha dist/test"
   },
   "dependencies": {
-    "@metacall/protocol": "^0.1.27",
+    "@metacall/protocol": "0.1.35",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "axios": "^1.13.5",
     "form-data": "^4.0.5",
     "validator": "^13.15.26",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -24,5 +25,8 @@
     "mocha": "^11.7.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

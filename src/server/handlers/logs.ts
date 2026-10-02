@@ -21,8 +21,8 @@ export const logsTool: MCPToolDefinition = {
       const logs = await api.logs(
         container,
         LogType.Deploy,
-        suffix,
         prefix,
+        suffix,
         version
       );
       return {

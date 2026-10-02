@@ -14,20 +14,27 @@ export const uploadTool: MCPToolDefinition = {
     UploadSchema,
     async ({ name, zipPath, zipBase64, jsons = [], runners = [] }) => {
 
-      let blob: Buffer;
+      let bytes: Buffer;
 
       if (zipPath) {
         if (!fs.existsSync(zipPath)) {
           throw new Error(`Zip file not found at path: ${zipPath}`);
         }
 
-        blob = fs.readFileSync(zipPath);
+        bytes = fs.readFileSync(zipPath);
       } 
       else {
-        blob = Buffer.from(zipBase64!, "base64");
+        bytes = Buffer.from(zipBase64!, "base64");
       }
 
-      const packageId = await api.upload(
+      // FaaS rejects file parts whose MIME type is neither application/x-zip-compressed
+      // nor application/zip, and api.upload only keeps it for a Blob, not a Readable.
+      // Buffer is not a valid BlobPart, hence the view.
+      const blob = new Blob([new Uint8Array(bytes)], {
+        type: "application/x-zip-compressed"
+      });
+
+      const { id } = await api.upload(
         name,
         blob,
         jsons,
@@ -36,7 +43,7 @@ export const uploadTool: MCPToolDefinition = {
 
       return {
         success: true,
-        packageId
+        packageId: id
       };
     }
   )
