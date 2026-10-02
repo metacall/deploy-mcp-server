@@ -1,4 +1,4 @@
-import { api } from "../../protocol/client.js";
+import { api, local } from "../../protocol/client.js";
 import { createToolHandler } from "../toolFactory.js";
 import { LogsSchema } from "../schemas/logs.schema.js";
 import type { MCPToolDefinition } from "../types.js";
@@ -15,6 +15,10 @@ export const logsTool: MCPToolDefinition = {
   execute: createToolHandler(
     LogsSchema,
     async ({ suffix, container }) => {
+      if (local) {
+        throw new Error("Local FaaS does not support logs");
+      }
+
       const deployment = await api.inspectByName(suffix);
       const prefix = deployment.prefix;
       const version = deployment.version;

@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { inflateRawSync } from "node:zlib";
 
 const deployment = {
+  status: "ready",
   prefix: "test-prefix",
   suffix: "test-suffix",
   version: "v3"
@@ -19,8 +20,9 @@ const secret = "s3cr3t-refresh-token";
 
 const routes: Record<string, [number, string]> = {
   "/api/package/create": [200, JSON.stringify({ id: "uploaded-package" })],
+  "/api/deploy/create": [200, JSON.stringify({ prefix: "test-prefix", suffix: "test-suffix", version: "v1" })],
   "/api/inspect": [200, JSON.stringify([deployment])],
-  "/api/deploy/logs": [200, "log line"],
+  "/api/deploy/logs": [200, "TODO: Implement Logs..."],
   "/test-prefix/test-suffix/v3/call/subtract": [200, "5"],
   "/validate": [401, JSON.stringify({ token: secret })]
 };
@@ -240,30 +242,6 @@ describe("Unit Protocol Client", function () {
     strictEqual(requests.length, start);
   });
 
-  it("logs prefix and suffix ordering", async () => {
-    const result = await callTool("logs", {
-      suffix: "test-suffix",
-      container: "node"
-    });
-
-    strictEqual(result.logs, "log line");
-
-    const [logs] = requests.filter(
-      request => request.url === "/api/deploy/logs"
-    );
-
-    strictEqual(
-      logs.body,
-      JSON.stringify({
-        container: "node",
-        type: "deploy",
-        prefix: "test-prefix",
-        suffix: "test-suffix",
-        version: "v3"
-      })
-    );
-  });
-
   it("protocol error status without response data", () =>
     rejects(callTool("validate", {}), (error: Error) => {
       const payload = JSON.parse(
@@ -299,15 +277,41 @@ describe("Unit Protocol Client", function () {
     ]);
   });
 
-  it("await local deployment unsupported", async () => {
+  it("deploy local deployment", async () => {
     const start = requests.length;
-    await rejects(callTool("await", {
-      suffix: "test-suffix",
-      function: "subtract"
-    }), /Local FaaS does not support await/);
+    const result = await callTool("deploy", {
+      name: "test-suffix",
+      plan: "Essential",
+      resourceType: "Package",
+      release: "main",
+      version: "v1"
+    });
 
+    deepStrictEqual(result, {
+      message: "Deployment is ready",
+      deployment: { prefix: "test-prefix", suffix: "test-suffix", version: "v1" }
+    });
     deepStrictEqual(requests.slice(start), [
+      {
+        url: "/api/deploy/create",
+        body: '{"resourceType":"Package","suffix":"test-suffix","release":"main","env":[],"plan":"Essential","version":"v1"}'
+      },
       { url: "/api/inspect", body: "" }
     ]);
+  });
+
+  it("local unsupported", async () => {
+    const start = requests.length;
+    const tools: [string, Record<string, unknown>][] = [
+      ["await", { suffix: "test-suffix", function: "subtract" }],
+      ["logs", { suffix: "test-suffix", container: "node" }],
+      ["refresh", {}]
+    ];
+
+    for (const [name, args] of tools) {
+      await rejects(callTool(name, args), new RegExp(`Local FaaS does not support ${name}`));
+    }
+
+    strictEqual(requests.length, start);
   });
 });

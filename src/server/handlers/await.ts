@@ -1,9 +1,7 @@
 import { createToolHandler } from "../toolFactory.js";
 import { AwaitSchema } from "../schemas/await.schema.js";
 import type { MCPToolDefinition } from "../types.js";
-import { api } from "../../protocol/client.js";
-
-const hostname = new URL(process.env.METACALL_BASE_URL!).hostname;
+import { api, local } from "../../protocol/client.js";
 
 export const awaitTool: MCPToolDefinition = {
   name: "await",
@@ -16,12 +14,11 @@ export const awaitTool: MCPToolDefinition = {
   execute: createToolHandler(
     AwaitSchema,
     async ({ suffix, function: fn, args }) => {
-      const deployment = await api.inspectByName(suffix);
-
-      if (["localhost", "127.0.0.1", "[::1]"].includes(hostname)) {
+      if (local) {
         throw new Error("Local FaaS does not support await");
       }
 
+      const deployment = await api.inspectByName(suffix);
       const result = await api.await(
         deployment.prefix,
         deployment.suffix,

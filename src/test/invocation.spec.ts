@@ -40,6 +40,10 @@ describe("Unit Invocation", () => {
         return Response.json(deployments);
       }
 
+      if (url === "https://dashboard.metacall.io/api/deploy/logs") {
+        return new Response("log line");
+      }
+
       if ([
         "https://v3-test-suffix-test-prefix.api.metacall.io/call/subtract",
         "https://v3-test-suffix-test-prefix.api.metacall.io/await/subtract"
@@ -110,6 +114,26 @@ describe("Unit Invocation", () => {
         { url: "https://dashboard.metacall.io/api/inspect", method: "GET", body: undefined }
       ]);
     }
+  });
+
+  it("logs prefix and suffix ordering", async () => {
+    deepStrictEqual(await execute("logs", { suffix: "test-suffix", container: "node" }), {
+      deployment: "test-suffix",
+      container: "node",
+      version: "v3",
+      logs: "log line"
+    });
+    deepStrictEqual(requests[1], {
+      url: "https://dashboard.metacall.io/api/deploy/logs",
+      method: "POST",
+      body: JSON.stringify({
+        container: "node",
+        type: "deploy",
+        prefix: "test-prefix",
+        suffix: "test-suffix",
+        version: "v3"
+      })
+    });
   });
 
   it("invocation protocol error", async () => {
