@@ -1,11 +1,12 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { deepStrictEqual, match, ok, rejects, strictEqual } from "node:assert";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { inflateRawSync } from "node:zlib";
 
 const deployment = {
   prefix: "test-prefix",
@@ -22,6 +23,50 @@ const routes: Record<string, [number, string]> = {
   "/api/deploy/logs": [200, "log line"],
   "/test-prefix/test-suffix/v3/call/subtract": [200, "5"],
   "/validate": [401, JSON.stringify({ token: secret })]
+};
+
+const project = async (files: Record<string, string>): Promise<string> => {
+  const root = await mkdtemp(join(tmpdir(), "mcp-"));
+
+  for (const [file, content] of Object.entries(files)) {
+    await mkdir(dirname(join(root, file)), { recursive: true });
+    await writeFile(join(root, file), content);
+  }
+
+  return root;
+};
+
+const multipart = (body: string): Record<string, string> => {
+  const boundary = body.slice(0, body.indexOf("\r\n"));
+
+  return Object.fromEntries(
+    body.split(boundary).slice(1, -1).map(part => [
+      /name="([^"]+)"/.exec(part)![1],
+      part.slice(part.indexOf("\r\n\r\n") + 4, -2)
+    ])
+  );
+};
+
+// Walks the central directory, which is enough for the small archives uploaded here.
+const unzip = (archive: Buffer): Record<string, string> => {
+  const end = archive.lastIndexOf(Buffer.from("PK\x05\x06", "latin1"));
+  const files: Record<string, string> = {};
+  let entry = archive.readUInt32LE(end + 16);
+
+  for (let i = 0; i < archive.readUInt16LE(end + 10); i++) {
+    const nameLength = archive.readUInt16LE(entry + 28);
+    const local = archive.readUInt32LE(entry + 42);
+    const start = local + 30 + archive.readUInt16LE(local + 26) + archive.readUInt16LE(local + 28);
+    const data = archive.subarray(start, start + archive.readUInt32LE(entry + 20));
+
+    files[archive.toString("utf8", entry + 46, entry + 46 + nameLength)] = (
+      archive.readUInt16LE(entry + 10) === 8 ? inflateRawSync(data) : data
+    ).toString();
+
+    entry += 46 + nameLength + archive.readUInt16LE(entry + 30) + archive.readUInt16LE(entry + 32);
+  }
+
+  return files;
 };
 
 describe("Unit Protocol Client", function () {
@@ -115,6 +160,84 @@ describe("Unit Protocol Client", function () {
     });
 
     strictEqual(result.packageId, "uploaded-package");
+  });
+
+  it("upload projectPath", async () => {
+    const projectPath = await project({
+      ".git/HEAD": "ref: refs/heads/master",
+      ".gitignore": "*.log",
+      "debug.log": "",
+      "index.js": "module.exports = { sum: (a, b) => a + b };",
+      "package.json": "{}",
+      "requirements.txt": "",
+      "src/index.py": "def add(a, b):\n\treturn a + b\n"
+    });
+
+    const result = await callTool("upload", {
+      name: "uploaded-package",
+      projectPath
+    });
+
+    strictEqual(result.packageId, "uploaded-package");
+
+    const { body } = requests.filter(
+      request => request.url === "/api/package/create"
+    ).pop()!;
+    const fields = multipart(body);
+
+    match(body, /name="raw"[\s\S]*?Content-Type: application\/x-zip-compressed/);
+    deepStrictEqual(JSON.parse(fields.runners).sort(), ["nodejs", "python"]);
+    deepStrictEqual(JSON.parse(fields.jsons), [
+      { language_id: "node", path: ".", scripts: ["index.js"] },
+      { language_id: "py", path: ".", scripts: ["src/index.py"] }
+    ]);
+    deepStrictEqual(unzip(Buffer.from(fields.raw, "latin1")), {
+      "index.js": "module.exports = { sum: (a, b) => a + b };",
+      "package.json": "{}",
+      "requirements.txt": "",
+      "src/index.py": "def add(a, b):\n\treturn a + b\n"
+    });
+  });
+
+  it("upload projectPath metacall.json", async () => {
+    const metacall = JSON.stringify({
+      language_id: "py",
+      path: ".",
+      scripts: ["index.py"]
+    });
+    const projectPath = await project({
+      "index.py": "def add(a, b):\n\treturn a + b\n",
+      "metacall.json": metacall
+    });
+
+    await callTool("upload", { name: "uploaded-package", projectPath });
+
+    const fields = multipart(requests.filter(
+      request => request.url === "/api/package/create"
+    ).pop()!.body);
+
+    deepStrictEqual(JSON.parse(fields.jsons), []);
+    deepStrictEqual(JSON.parse(fields.runners), []);
+    strictEqual(unzip(Buffer.from(fields.raw, "latin1"))["metacall.json"], metacall);
+  });
+
+  it("upload invalid source", async () => {
+    const start = requests.length;
+    const projectPath = join(await project({ "app.zip": "PK" }), "app.zip");
+
+    await rejects(
+      callTool("upload", { name: "uploaded-package", projectPath }),
+      /is not a directory/
+    );
+    await rejects(
+      callTool("upload", { name: "uploaded-package", projectPath, zipPath: projectPath }),
+      /Provide exactly one of projectPath, zipPath or zipBase64/
+    );
+    await rejects(
+      callTool("upload", { name: "uploaded-package", projectPath: tmpdir(), runners: ["python"] }),
+      /jsons and runners are detected from projectPath/
+    );
+    strictEqual(requests.length, start);
   });
 
   it("logs prefix and suffix ordering", async () => {

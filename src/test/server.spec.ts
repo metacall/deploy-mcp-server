@@ -81,8 +81,8 @@ describe("Unit MCP Server", function () {
   it("tools/list upload required arguments", () => {
     const upload = tools.find((tool) => tool.name === "upload");
 
-    // The "provide either zipPath or zipBase64" refinement is a Zod effect and does
-    // not survive the JSON Schema conversion, so clients only see "name" required.
+    // The "exactly one of projectPath, zipPath or zipBase64" refinement is a Zod effect
+    // and does not survive the JSON Schema conversion, so clients only see "name" required.
     deepStrictEqual(upload?.inputSchema.required, ["name"]);
   });
 });
