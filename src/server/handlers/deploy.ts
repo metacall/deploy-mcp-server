@@ -2,7 +2,7 @@ import { api } from "../../protocol/client.js";
 import { createToolHandler } from "../toolFactory.js";
 import { DeploySchema } from "../schemas/deploy.schema.js";
 import type { MCPToolDefinition } from "../types.js";
-import { ResourceType } from "@metacall/protocol";
+import { waitFor } from "@metacall/protocol";
 
 export const deployTool: MCPToolDefinition = {
   name: "deploy",
@@ -36,8 +36,22 @@ Parameters:
         version
       );
 
+      const inspected = await waitFor(async () => {
+        const current = await api.inspectByName(deployment.suffix);
+
+        if (current.status === "create") {
+          throw new Error("Deployment not ready yet");
+        }
+
+        return current;
+      });
+
+      if (inspected.status !== "ready") {
+        throw new Error(`Deployment '${deployment.suffix}' failed`);
+      }
+
       return {
-        message: "Deployment created successfully",
+        message: "Deployment is ready",
         deployment
       };
     }
