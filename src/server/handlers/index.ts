@@ -13,7 +13,6 @@ import { branchListTool } from "./branchList.js";
 import { fileListTool } from "./fileList.js";
 import { listSubscriptionsDeploysTool } from "./listSubscriptionsDeploys.js";
 import { callTool } from "./call.js";
-import { invokeTool } from "./invoke.js";
 import { awaitTool } from "./await.js";
 import { logsTool } from "./logs.js";
 
@@ -34,7 +33,6 @@ export const tools = [
   fileListTool,
   listSubscriptionsDeploysTool,
   callTool,
-  //invokeTool, invoke is commented out because call and await is sufficient.
   awaitTool,
   logsTool
 ];

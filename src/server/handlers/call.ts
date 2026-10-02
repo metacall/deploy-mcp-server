@@ -1,7 +1,7 @@
 import { createToolHandler } from "../toolFactory.js";
 import { CallSchema } from "../schemas/call.schema.js";
 import type { MCPToolDefinition } from "../types.js";
-import { invokeDeploymentFunction } from "../../utils/invokeDeploymentFunction.js";
+import { api } from "../../protocol/client.js";
 
 export const callTool: MCPToolDefinition = {
   name: "call",
@@ -11,13 +11,22 @@ export const callTool: MCPToolDefinition = {
   execute: createToolHandler(
     CallSchema,
     async ({ suffix, function: fn, args }) => {
-      return invokeDeploymentFunction(
-        suffix,
+      const deployment = await api.inspectByName(suffix);
+      const result = await api.call(
+        deployment.prefix,
+        deployment.suffix,
+        deployment.version,
         fn,
-        "call",
-        args
+        args ?? {}
       );
 
+      return {
+        deployment: suffix,
+        function: fn,
+        invocationType: "call",
+        version: deployment.version,
+        result
+      };
     }
   )
 };

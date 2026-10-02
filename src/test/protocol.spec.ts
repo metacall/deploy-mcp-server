@@ -1,6 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { match, ok, rejects, strictEqual } from "assert";
+import { deepStrictEqual, match, ok, rejects, strictEqual } from "node:assert";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -20,6 +20,7 @@ const routes: Record<string, [number, string]> = {
   "/api/package/create": [200, JSON.stringify({ id: "uploaded-package" })],
   "/api/inspect": [200, JSON.stringify([deployment])],
   "/api/deploy/logs": [200, "log line"],
+  "/test-prefix/test-suffix/v3/call/subtract": [200, "5"],
   "/validate": [401, JSON.stringify({ token: secret })]
 };
 
@@ -64,10 +65,10 @@ describe("Unit Protocol Client", function () {
     await client.connect(
       new StdioClientTransport({
         command: process.execPath,
-        args: ["dist/index.js"],
+        args: ["--dns-result-order=ipv4first", "dist/index.js"],
         env: {
           METACALL_TOKEN: "yeet",
-          METACALL_BASE_URL: `http://127.0.0.1:${
+          METACALL_BASE_URL: `http://localhost:${
             (faas.address() as AddressInfo).port
           }`
         }
@@ -153,4 +154,37 @@ describe("Unit Protocol Client", function () {
 
       return true;
     }));
+
+  it("call local deployment", async () => {
+    const start = requests.length;
+    const result = await callTool("call", {
+      suffix: "test-suffix",
+      function: "subtract",
+      args: { left: 7, right: 2 }
+    });
+
+    deepStrictEqual(result, {
+      deployment: "test-suffix",
+      function: "subtract",
+      invocationType: "call",
+      version: "v3",
+      result: 5
+    });
+    deepStrictEqual(requests.slice(start), [
+      { url: "/api/inspect", body: "" },
+      { url: "/test-prefix/test-suffix/v3/call/subtract", body: '{"left":7,"right":2}' }
+    ]);
+  });
+
+  it("await local deployment unsupported", async () => {
+    const start = requests.length;
+    await rejects(callTool("await", {
+      suffix: "test-suffix",
+      function: "subtract"
+    }), /Local FaaS does not support await/);
+
+    deepStrictEqual(requests.slice(start), [
+      { url: "/api/inspect", body: "" }
+    ]);
+  });
 });
