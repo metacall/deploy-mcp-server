@@ -2,10 +2,17 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
-  ListToolsRequestSchema
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  ReadResourceRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { tools } from "./server/handlers/index.js";
+import { resources, resourceTemplates, readResource } from "./server/resources.js";
+import { prompts, getPrompt } from "./server/prompts.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
 const server = new Server(
@@ -15,9 +22,19 @@ const server = new Server(
   },
   {
     capabilities: {
-      tools: {}
+      tools: {},
+      resources: {},
+      prompts: {}
     }
   }
+);
+
+server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources }));
+server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({ resourceTemplates }));
+server.setRequestHandler(ReadResourceRequestSchema, request => readResource(request.params.uri));
+server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts }));
+server.setRequestHandler(GetPromptRequestSchema, async request =>
+  getPrompt(request.params.name, request.params.arguments)
 );
 
 // Discovery phase

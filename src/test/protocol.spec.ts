@@ -98,6 +98,7 @@ describe("Unit Protocol Client", function () {
   let faas: Server;
   let client: Client;
   let inspections: typeof deployment[];
+  let inspectStatus: number;
   let deleteStatus: number;
 
   const callTool = async (
@@ -124,7 +125,7 @@ describe("Unit Protocol Client", function () {
         let [status, body] = routes[url] ?? [404, ""];
 
         if (url === "/api/inspect") {
-          [status, body] = [200, JSON.stringify(inspections)];
+          [status, body] = [inspectStatus, JSON.stringify(inspectStatus === 200 ? inspections : { token: secret })];
         } else if (url === "/api/deploy/delete") {
           [status, body] = [deleteStatus, JSON.stringify("deleted")];
         } else if ([deployment, otherDeployment].some(({ prefix, suffix, version }) =>
@@ -146,6 +147,7 @@ describe("Unit Protocol Client", function () {
   beforeEach(async () => {
     requests.length = 0;
     inspections = [deployment, otherDeployment];
+    inspectStatus = 200;
     deleteStatus = 200;
     client = new Client({ name: "metacall-mcp-server-test", version: "1.0.0" });
 
@@ -172,6 +174,108 @@ describe("Unit Protocol Client", function () {
         faas.close(err => (err ? reject(err) : resolve()))
       );
     }
+  });
+
+  const readResource = async (uri: string) => {
+    const { contents } = await client.readResource({ uri });
+    strictEqual(contents.length, 1);
+    strictEqual(contents[0].uri, uri);
+    strictEqual(contents[0].mimeType, "application/json");
+    ok("text" in contents[0]);
+    return JSON.parse(contents[0].text);
+  };
+
+  it("empty context resource", async () => {
+    deepStrictEqual(await readResource("metacall://context"), { target: "local" });
+    strictEqual(requests.length, 0);
+  });
+
+  it("context resource", async () => {
+    await callTool("inspectByName", { suffix: "test-suffix" });
+    await callTool("call", { function: "subtract", args: { a: 10, b: 3 } });
+    const start = requests.length;
+    const expected = {
+      target: "local",
+      activeDeployment: {
+        prefix: "test-prefix", suffix: "test-suffix", version: "v3",
+        functions: [{ name: "subtract", async: false, args: ["a", "b"] }]
+      }
+    };
+
+    deepStrictEqual(await readResource("metacall://context"), expected);
+    deepStrictEqual(await readResource("metacall://context"), expected);
+    strictEqual(requests.length, start);
+  });
+
+  it("deployment list resource", async () => {
+    await callTool("inspectByName", { suffix: "other-suffix" });
+    const context = await readResource("metacall://context");
+    const start = requests.length;
+
+    deepStrictEqual(await readResource("metacall://deployments"), [deployment, otherDeployment]);
+    inspections = [deployment];
+    deepStrictEqual(await readResource("metacall://deployments"), [deployment]);
+    deepStrictEqual(await readResource("metacall://context"), context);
+    deepStrictEqual(requests.slice(start), [
+      { url: "/api/inspect", body: "" },
+      { url: "/api/inspect", body: "" }
+    ]);
+  });
+
+  it("deployment detail resource", async () => {
+    await callTool("inspectByName", { suffix: "other-suffix" });
+    const context = await readResource("metacall://context");
+    const start = requests.length;
+
+    deepStrictEqual(await readResource("metacall://deployments/test-suffix"), deployment);
+    inspections = [{ ...deployment, version: "v4" }];
+    deepStrictEqual(await readResource("metacall://deployments/test%2Dsuffix"), inspections[0]);
+    deepStrictEqual(await readResource("metacall://context"), context);
+    deepStrictEqual(requests.slice(start), [
+      { url: "/api/inspect", body: "" },
+      { url: "/api/inspect", body: "" }
+    ]);
+  });
+
+  it("resource errors", async () => {
+    await callTool("inspectByName", { suffix: "other-suffix" });
+    const context = await readResource("metacall://context");
+    await rejects(client.readResource({ uri: "metacall://deployments/does-not-exist" }),
+      /does-not-exist.*not found/i);
+    inspectStatus = 503;
+
+    for (const uri of ["metacall://deployments", "metacall://deployments/test-suffix"]) {
+      await rejects(client.readResource({ uri }), (error: Error) => {
+        match(error.message, /ProtocolError/);
+        match(error.message, /503/);
+        ok(!error.message.includes(secret));
+        return true;
+      });
+    }
+    deepStrictEqual(await readResource("metacall://context"), context);
+  });
+
+  it("invalid resource URI", async () => {
+    for (const uri of [
+      "file:///etc/passwd", "metacall://unknown", "metacall://deployments/",
+      "metacall://deployments/test-suffix/functions", "metacall://deployments/%zz",
+      "metacall://deployments/test-suffix?extra=1", "metacall://deployments/test-suffix#extra",
+      "metacall://user@deployments/test-suffix", "metacall://deployments:123/test-suffix"
+    ]) {
+      await rejects(client.readResource({ uri }), /resource.*URI|unknown resource/i);
+    }
+    strictEqual(requests.length, 0);
+  });
+
+  it("prompts leave context", async () => {
+    await callTool("inspectByName", { suffix: "other-suffix" });
+    const context = await readResource("metacall://context");
+    const start = requests.length;
+
+    await client.getPrompt({ name: "deploy-project", arguments: { projectPath: "/unused", name: "demo" } });
+    await client.getPrompt({ name: "invoke-function", arguments: { function: "subtract", suffix: "test-suffix" } });
+    deepStrictEqual(await readResource("metacall://context"), context);
+    strictEqual(requests.length, start);
   });
 
   it("upload zipBase64", async () => {
