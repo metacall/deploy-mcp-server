@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { deepStrictEqual, ok, strictEqual } from "assert";
+import { deepStrictEqual, ok, rejects, strictEqual } from "node:assert";
 
 // The tools barrel intentionally leaves out "ready" (unavailable in the dashboard)
 // and "invoke" (superseded by "call" and "await"), so neither must be advertised.
@@ -84,5 +84,13 @@ describe("Unit MCP Server", function () {
     // The "exactly one of projectPath, zipPath or zipBase64" refinement is a Zod effect
     // and does not survive the JSON Schema conversion, so clients only see "name" required.
     deepStrictEqual(upload?.inputSchema.required, ["name"]);
+  });
+
+  it("invocation without context", async () => {
+    for (const name of ["call", "await"]) {
+      deepStrictEqual(tools.find(tool => tool.name === name)?.inputSchema.required, ["function"]);
+      await rejects(client.callTool({ name, arguments: { function: "subtract" } }),
+        /No active deployment.*suffix.*deploy.*inspect/i);
+    }
   });
 });

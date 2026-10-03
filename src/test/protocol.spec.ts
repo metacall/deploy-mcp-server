@@ -12,8 +12,29 @@ const deployment = {
   status: "ready",
   prefix: "test-prefix",
   suffix: "test-suffix",
-  version: "v3"
+  version: "v3",
+  packages: {
+    node: [{
+      name: "index.js",
+      scope: {
+        name: "index.js",
+        funcs: [{
+          name: "subtract",
+          signature: {
+            ret: { type: { name: "double", id: 6 } },
+            args: ["a", "b"].map(name => ({ name, type: { name: "double", id: 6 } }))
+          },
+          async: false
+        }],
+        classes: [],
+        objects: []
+      }
+    }]
+  },
+  ports: []
 };
+
+const otherDeployment = { ...deployment, prefix: "other-prefix", suffix: "other-suffix", version: "v7" };
 
 // Returned as the body of a failing request, so it must never reach the client.
 const secret = "s3cr3t-refresh-token";
@@ -21,9 +42,7 @@ const secret = "s3cr3t-refresh-token";
 const routes: Record<string, [number, string]> = {
   "/api/package/create": [200, JSON.stringify({ id: "uploaded-package" })],
   "/api/deploy/create": [200, JSON.stringify({ prefix: "test-prefix", suffix: "test-suffix", version: "v1" })],
-  "/api/inspect": [200, JSON.stringify([deployment])],
   "/api/deploy/logs": [200, "TODO: Implement Logs..."],
-  "/test-prefix/test-suffix/v3/call/subtract": [200, "5"],
   "/validate": [401, JSON.stringify({ token: secret })]
 };
 
@@ -78,6 +97,8 @@ describe("Unit Protocol Client", function () {
 
   let faas: Server;
   let client: Client;
+  let inspections: typeof deployment[];
+  let deleteStatus: number;
 
   const callTool = async (
     name: string,
@@ -97,16 +118,35 @@ describe("Unit Protocol Client", function () {
         const url = req.url ?? "";
 
         // Multipart bodies carry binary zip bytes, latin1 keeps the part headers intact.
-        requests.push({ url, body: Buffer.concat(chunks).toString("latin1") });
+        const requestBody = Buffer.concat(chunks).toString("latin1");
+        requests.push({ url, body: requestBody });
 
-        const [status, body] = routes[url] ?? [404, ""];
+        let [status, body] = routes[url] ?? [404, ""];
+
+        if (url === "/api/inspect") {
+          [status, body] = [200, JSON.stringify(inspections)];
+        } else if (url === "/api/deploy/delete") {
+          [status, body] = [deleteStatus, JSON.stringify("deleted")];
+        } else if ([deployment, otherDeployment].some(({ prefix, suffix, version }) =>
+          url === `/${prefix}/${suffix}/${version}/call/subtract`
+        )) {
+          // Local FaaS invokes positional arguments in JSON object key order.
+          const [a, b] = Object.values(JSON.parse(requestBody)) as number[];
+          [status, body] = [200, JSON.stringify(a - b)];
+        }
+
         res.writeHead(status, { "Content-Type": "application/json" });
         res.end(body);
       });
     });
 
     await new Promise<void>(resolve => faas.listen(0, "127.0.0.1", resolve));
+  });
 
+  beforeEach(async () => {
+    requests.length = 0;
+    inspections = [deployment, otherDeployment];
+    deleteStatus = 200;
     client = new Client({ name: "metacall-mcp-server-test", version: "1.0.0" });
 
     await client.connect(
@@ -123,9 +163,9 @@ describe("Unit Protocol Client", function () {
     );
   });
 
-  after(async () => {
-    await client?.close();
+  afterEach(async () => client?.close());
 
+  after(async () => {
     if (faas?.listening) {
       faas.closeAllConnections();
       await new Promise<void>((resolve, reject) =>
@@ -256,12 +296,12 @@ describe("Unit Protocol Client", function () {
       return true;
     }));
 
-  it("call local deployment", async () => {
+  it("local argument order", async () => {
     const start = requests.length;
     const result = await callTool("call", {
       suffix: "test-suffix",
       function: "subtract",
-      args: { left: 7, right: 2 }
+      args: { b: 3, a: 10 }
     });
 
     deepStrictEqual(result, {
@@ -269,15 +309,48 @@ describe("Unit Protocol Client", function () {
       function: "subtract",
       invocationType: "call",
       version: "v3",
-      result: 5
+      result: 7
     });
     deepStrictEqual(requests.slice(start), [
       { url: "/api/inspect", body: "" },
-      { url: "/test-prefix/test-suffix/v3/call/subtract", body: '{"left":7,"right":2}' }
+      { url: "/test-prefix/test-suffix/v3/call/subtract", body: '{"a":10,"b":3}' }
     ]);
   });
 
-  it("deploy local deployment", async () => {
+  it("local argument fallback", async () => {
+    const handle = deployment.packages.node[0];
+    const fn = handle.scope.funcs[0];
+    const cases: [typeof fn[], Record<string, number>, string, number | null][] = [
+      [[fn], { extra: 99, b: 3, a: 10 }, '{"a":10,"b":3,"extra":99}', 7],
+      [[], { b: 3, a: 10 }, '{"b":3,"a":10}', -7],
+      [[fn, fn], { b: 3, a: 10 }, '{"b":3,"a":10}', -7],
+      [[{ ...fn, signature: { ...fn.signature, args: [fn.signature.args[0], fn.signature.args[0]] } }],
+        { extra: 99, a: 10 }, '{"extra":99,"a":10}', 89],
+      [[fn], { b: 3 }, '{"b":3}', null]
+    ];
+
+    for (const [funcs, args, body, expected] of cases) {
+      inspections = [{
+        ...deployment,
+        packages: { node: [{ ...handle, scope: { ...handle.scope, funcs } }] }
+      }];
+      const result = await callTool("call", { suffix: "test-suffix", function: "subtract", args });
+
+      strictEqual(result.result, expected);
+      strictEqual(requests.at(-1)?.body, body);
+    }
+  });
+
+  it("missing context", async () => {
+    await rejects(callTool("call", { function: "subtract", args: { a: 7, b: 2 } }), (error: Error) => {
+      match(error.message, /no active deployment|no deployment.*context/i);
+      match(error.message, /deploy|inspectByName|suffix/i);
+      return true;
+    });
+    strictEqual(requests.length, 0);
+  });
+
+  it("deploy context", async () => {
     const start = requests.length;
     const result = await callTool("deploy", {
       name: "test-suffix",
@@ -291,13 +364,93 @@ describe("Unit Protocol Client", function () {
       message: "Deployment is ready",
       deployment: { prefix: "test-prefix", suffix: "test-suffix", version: "v1" }
     });
+    deepStrictEqual(await callTool("call", { function: "subtract", args: { b: 2, a: 7 } }), {
+      deployment: "test-suffix",
+      function: "subtract",
+      invocationType: "call",
+      version: "v3",
+      result: 5
+    });
     deepStrictEqual(requests.slice(start), [
       {
         url: "/api/deploy/create",
         body: '{"resourceType":"Package","suffix":"test-suffix","release":"main","env":[],"plan":"Essential","version":"v1"}'
       },
-      { url: "/api/inspect", body: "" }
+      { url: "/api/inspect", body: "" },
+      { url: "/test-prefix/test-suffix/v3/call/subtract", body: '{"a":7,"b":2}' }
     ]);
+  });
+
+  it("inspectByName context", async () => {
+    const inspected = await callTool("inspectByName", { suffix: "test-suffix" });
+    strictEqual(inspected.found, true);
+    const result = await callTool("call", { function: "subtract", args: { b: 3, a: 10 } });
+
+    strictEqual(result.result, 7);
+    strictEqual(result.version, "v3");
+    deepStrictEqual(requests, [
+      { url: "/api/inspect", body: "" },
+      { url: "/test-prefix/test-suffix/v3/call/subtract", body: '{"a":10,"b":3}' }
+    ]);
+  });
+
+  it("explicit suffix", async () => {
+    await callTool("inspectByName", { suffix: "test-suffix" });
+    const start = requests.length;
+    await callTool("call", { suffix: "other-suffix", function: "subtract", args: { b: 4, a: 11 } });
+    const result = await callTool("call", { function: "subtract", args: { b: 2, a: 12 } });
+
+    strictEqual(result.deployment, "other-suffix");
+    strictEqual(result.version, "v7");
+    strictEqual(result.result, 10);
+    deepStrictEqual(requests.slice(start), [
+      { url: "/api/inspect", body: "" },
+      { url: "/other-prefix/other-suffix/v7/call/subtract", body: '{"a":11,"b":4}' },
+      { url: "/other-prefix/other-suffix/v7/call/subtract", body: '{"a":12,"b":2}' }
+    ]);
+  });
+
+  it("inspect leaves context", async () => {
+    await callTool("inspect", {});
+    await rejects(callTool("call", { function: "subtract" }), /no active deployment|no deployment.*context/i);
+    await callTool("inspectByName", { suffix: "test-suffix" });
+    inspections = [otherDeployment];
+    await callTool("inspect", {});
+    const start = requests.length;
+    const result = await callTool("call", { function: "subtract", args: { b: 2, a: 7 } });
+
+    strictEqual(result.deployment, "test-suffix");
+    strictEqual(result.result, 5);
+    deepStrictEqual(requests.slice(start), [
+      { url: "/test-prefix/test-suffix/v3/call/subtract", body: '{"a":7,"b":2}' }
+    ]);
+  });
+
+  it("unrelated or failed delete", async () => {
+    await callTool("inspectByName", { suffix: "test-suffix" });
+    await callTool("deployDelete", { suffix: "other-suffix", version: "v7" });
+    strictEqual((await callTool("call", { function: "subtract", args: { a: 7, b: 2 } })).result, 5);
+
+    deleteStatus = 500;
+    await rejects(callTool("deployDelete", { suffix: "test-suffix", version: "v3" }));
+    const start = requests.length;
+    strictEqual((await callTool("call", { function: "subtract", args: { a: 10, b: 3 } })).result, 7);
+    deepStrictEqual(requests.slice(start), [
+      { url: "/test-prefix/test-suffix/v3/call/subtract", body: '{"a":10,"b":3}' }
+    ]);
+  });
+
+  it("local delete clears context", async () => {
+    await callTool("inspectByName", { suffix: "test-suffix" });
+    await callTool("deployDelete", { suffix: "test-suffix", version: "v1" });
+    deepStrictEqual(requests.at(-1), {
+      url: "/api/deploy/delete",
+      body: '{"prefix":"test-prefix","suffix":"test-suffix","version":"v1"}'
+    });
+    const start = requests.length;
+
+    await rejects(callTool("call", { function: "subtract", args: { a: 7, b: 2 } }), /no active deployment|no deployment.*context/i);
+    strictEqual(requests.length, start);
   });
 
   it("local unsupported", async () => {

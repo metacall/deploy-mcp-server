@@ -3,7 +3,8 @@ import { z } from "zod";
 export const CallSchema = z.object({
   suffix: z
     .string()
-    .describe("Deployment suffix which is usually the zip or repository name"),
+    .optional()
+    .describe("Deployment suffix (usually the zip or repository name). Omit to use this session's active deployment."),
 
   function: z
     .string()

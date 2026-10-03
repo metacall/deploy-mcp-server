@@ -4,7 +4,31 @@ import type { MCPToolDefinition } from "../server/types.js";
 
 const deployments = [
   { prefix: "other-prefix", suffix: "other-suffix", version: "v1" },
-  { prefix: "test-prefix", suffix: "test-suffix", version: "v3" }
+  {
+    prefix: "test-prefix", suffix: "test-suffix", version: "v3",
+    status: "ready", ports: [],
+    packages: {
+      node: [{
+        name: "index.js",
+        scope: {
+          name: "index.js", classes: [], objects: [],
+          funcs: [{
+            name: "subtract", async: false,
+            signature: {
+              ret: { type: { name: "", id: 14 } },
+              args: ["left", "right"].map(name => ({ name, type: { name: "", id: 14 } }))
+            }
+          }, {
+            name: "later", async: true,
+            signature: {
+              ret: { type: { name: "", id: 14 } },
+              args: [{ name: "value", type: { name: "", id: 14 } }]
+            }
+          }]
+        }
+      }]
+    }
+  }
 ];
 
 describe("Unit Invocation", () => {
@@ -44,6 +68,10 @@ describe("Unit Invocation", () => {
         return new Response("log line");
       }
 
+      if (url === "https://dashboard.metacall.io/api/deploy/delete") {
+        return Response.json("deleted");
+      }
+
       if ([
         "https://v3-test-suffix-test-prefix.api.metacall.io/call/subtract",
         "https://v3-test-suffix-test-prefix.api.metacall.io/await/subtract"
@@ -73,7 +101,7 @@ describe("Unit Invocation", () => {
 
   for (const name of ["call", "await"]) {
     it(`${name} protocol invocation`, async () => {
-      for (const args of [{ left: 7, right: 2 }, undefined]) {
+      for (const args of [{ right: 2, left: 7 }, undefined]) {
         requests.length = 0;
         const result = await execute(name, {
           suffix: "test-suffix",
@@ -93,9 +121,17 @@ describe("Unit Invocation", () => {
           {
             url: `https://v3-test-suffix-test-prefix.api.metacall.io/${name}/subtract`,
             method: "POST",
-            body: args === undefined ? "{}" : '{"left":7,"right":2}'
+            body: args === undefined ? "{}" : '{"right":2,"left":7}'
           }
         ]);
+
+        requests.length = 0;
+        deepStrictEqual(await execute(name, { function: "subtract", args }), result);
+        deepStrictEqual(requests, [{
+          url: `https://v3-test-suffix-test-prefix.api.metacall.io/${name}/subtract`,
+          method: "POST",
+          body: args === undefined ? "{}" : '{"right":2,"left":7}'
+        }]);
       }
     });
   }
@@ -114,6 +150,30 @@ describe("Unit Invocation", () => {
         { url: "https://dashboard.metacall.io/api/inspect", method: "GET", body: undefined }
       ]);
     }
+  });
+
+  it("function catalog", async () => {
+    await execute("inspectByName", { suffix: "test-suffix" });
+    const { getContext } = await import("../context.js");
+    deepStrictEqual(getContext(), {
+      target: "cloud",
+      activeDeployment: {
+        prefix: "test-prefix", suffix: "test-suffix", version: "v3",
+        functions: [
+          { name: "subtract", async: false, args: ["left", "right"] },
+          { name: "later", async: true, args: ["value"] }
+        ]
+      }
+    });
+  });
+
+  it("cloud delete version", async () => {
+    await execute("inspectByName", { suffix: "test-suffix" });
+    await execute("deployDelete", { suffix: "test-suffix", version: "v1" });
+    strictEqual((await execute("await", { function: "subtract" })).deployment, "test-suffix");
+
+    await execute("deployDelete", { suffix: "test-suffix", version: "v3" });
+    await rejects(execute("await", { function: "subtract" }), /No active deployment/);
   });
 
   it("logs prefix and suffix ordering", async () => {

@@ -3,8 +3,9 @@ import { z } from "zod";
 export const AwaitSchema = z.object({
   suffix: z
     .string()
+    .optional()
     .describe(
-      "Deployment suffix (usually the zip or repository name)."
+      "Deployment suffix (usually the zip or repository name). Omit to use this session's active deployment."
     ),
 
   function: z

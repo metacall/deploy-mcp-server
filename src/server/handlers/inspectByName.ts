@@ -1,4 +1,5 @@
 import { api } from "../../protocol/client.js";
+import { setActiveDeployment } from "../../context.js";
 import { createToolHandler } from "../toolFactory.js";
 import { InspectByNameSchema } from "../schemas/inspectByName.schema.js";
 import type { MCPToolDefinition } from "../types.js";
@@ -17,6 +18,7 @@ export const inspectByNameTool: MCPToolDefinition = {
     async ({ suffix }) => {
         try {
             const deployment = await api.inspectByName(suffix);
+            if (deployment) setActiveDeployment(deployment);
             return {
                 found: !!deployment,
                 deployment: deployment ?? null

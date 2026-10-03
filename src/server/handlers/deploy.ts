@@ -1,4 +1,5 @@
 import { api } from "../../protocol/client.js";
+import { setActiveDeployment } from "../../context.js";
 import { createToolHandler } from "../toolFactory.js";
 import { DeploySchema } from "../schemas/deploy.schema.js";
 import type { MCPToolDefinition } from "../types.js";
@@ -49,6 +50,8 @@ Parameters:
       if (inspected.status !== "ready") {
         throw new Error(`Deployment '${deployment.suffix}' failed`);
       }
+
+      setActiveDeployment(inspected);
 
       return {
         message: "Deployment is ready",

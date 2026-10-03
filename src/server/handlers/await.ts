@@ -2,6 +2,7 @@ import { createToolHandler } from "../toolFactory.js";
 import { AwaitSchema } from "../schemas/await.schema.js";
 import type { MCPToolDefinition } from "../types.js";
 import { api, local } from "../../protocol/client.js";
+import { resolveDeployment } from "../../context.js";
 
 export const awaitTool: MCPToolDefinition = {
   name: "await",
@@ -18,7 +19,7 @@ export const awaitTool: MCPToolDefinition = {
         throw new Error("Local FaaS does not support await");
       }
 
-      const deployment = await api.inspectByName(suffix);
+      const deployment = await resolveDeployment(suffix);
       const result = await api.await(
         deployment.prefix,
         deployment.suffix,
@@ -28,7 +29,7 @@ export const awaitTool: MCPToolDefinition = {
       );
 
       return {
-        deployment: suffix,
+        deployment: deployment.suffix,
         function: fn,
         invocationType: "await",
         version: deployment.version,

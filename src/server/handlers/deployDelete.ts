@@ -1,4 +1,5 @@
 import { api } from "../../protocol/client.js";
+import { clearActiveDeployment } from "../../context.js";
 import { createToolHandler } from "../toolFactory.js";
 import { DeployDeleteSchema } from "../schemas/deployDelete.schema.js";
 import type { MCPToolDefinition } from "../types.js";
@@ -21,6 +22,7 @@ export const deployDeleteTool: MCPToolDefinition = {
       const prefix = (deployment as any).prefix;
       // Delete deployment
       const result = await api.deployDelete(prefix, suffix, version ?? "v1");
+      clearActiveDeployment(prefix, suffix, version ?? "v1");
       return {
         message: "Deployment deleted successfully",
         deployment: {
