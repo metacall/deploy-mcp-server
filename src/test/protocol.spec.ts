@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { deepStrictEqual, match, ok, rejects, strictEqual } from "node:assert";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -46,8 +46,10 @@ const routes: Record<string, [number, string]> = {
   "/validate": [401, JSON.stringify({ token: secret })]
 };
 
+let testWorkspace: string;
+
 const project = async (files: Record<string, string>): Promise<string> => {
-  const root = await mkdtemp(join(tmpdir(), "mcp-"));
+  const root = await mkdtemp(join(testWorkspace, "project-"));
 
   for (const [file, content] of Object.entries(files)) {
     await mkdir(dirname(join(root, file)), { recursive: true });
@@ -111,6 +113,7 @@ describe("Unit Protocol Client", function () {
   };
 
   before(async () => {
+    testWorkspace = await mkdtemp(join(tmpdir(), "mcp-protocol-"));
     faas = createServer((req, res) => {
       const chunks: Buffer[] = [];
 
@@ -157,6 +160,7 @@ describe("Unit Protocol Client", function () {
         args: ["--dns-result-order=ipv4first", "dist/index.js"],
         env: {
           METACALL_TOKEN: "yeet",
+          METACALL_WORKSPACE_ROOT: testWorkspace,
           METACALL_BASE_URL: `http://localhost:${
             (faas.address() as AddressInfo).port
           }`
@@ -174,6 +178,7 @@ describe("Unit Protocol Client", function () {
         faas.close(err => (err ? reject(err) : resolve()))
       );
     }
+    await rm(testWorkspace, { recursive: true, force: true });
   });
 
   const readResource = async (uri: string) => {
@@ -297,7 +302,7 @@ describe("Unit Protocol Client", function () {
   });
 
   it("upload zipPath", async () => {
-    const zipPath = join(await mkdtemp(join(tmpdir(), "mcp-")), "app.zip");
+    const zipPath = join(await mkdtemp(join(testWorkspace, "zip-")), "app.zip");
     await writeFile(zipPath, "PK");
 
     const result = await callTool("upload", {

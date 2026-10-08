@@ -14,6 +14,7 @@ import { tools } from "./server/handlers/index.js";
 import { resources, resourceTemplates, readResource } from "./server/resources.js";
 import { prompts, getPrompt } from "./server/prompts.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
+import { redactCredentials } from "./protocol/client.js";
 
 const server = new Server(
   {
@@ -54,7 +55,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   const tool = tools.find((t) => t.name === name);
   if (!tool) {
-    throw new Error(`Unknown tool: ${name}`);
+    throw new Error(`Unknown tool: ${redactCredentials(name)}`);
   }
 
   const result = await tool.execute(args);
@@ -63,7 +64,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     content: [
       {
         type: "text",
-        text: JSON.stringify(result, null, 2)
+        text: redactCredentials(JSON.stringify(result, null, 2))
       }
     ]
   };

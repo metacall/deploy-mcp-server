@@ -1,6 +1,5 @@
-import fs from "fs";
-import { stat } from "fs/promises";
-import { resolve } from "path";
+import { createReadStream } from "node:fs";
+import { extname } from "node:path";
 import {
   generateJsonsFromFiles,
   generatePackage,
@@ -11,6 +10,8 @@ import { createToolHandler } from "../toolFactory.js";
 import { UploadSchema } from "../schemas/upload.schema.js";
 import type { MCPToolDefinition } from "../types.js";
 import { zip } from "../../utils/zip.js";
+import { getWorkspaceRoot, workspacePath } from "../../utils/workspace.js";
+import { assertUploadSize, bufferUpload, decodeZipBase64 } from "../../utils/uploadLimits.js";
 
 //upload tool definition to upload a zip package to MetaCall Cloud before deploying.
 export const uploadTool: MCPToolDefinition = {
@@ -25,16 +26,7 @@ export const uploadTool: MCPToolDefinition = {
       let bytes: Buffer;
 
       if (projectPath) {
-        const rootPath = resolve(projectPath);
-        const stats = await stat(rootPath).catch(() => undefined);
-
-        if (!stats) {
-          throw new Error(`Invalid root path: "${rootPath}" not found.`);
-        }
-
-        if (!stats.isDirectory()) {
-          throw new Error(`Invalid root path: "${rootPath}" is not a directory.`);
-        }
+        const { path: rootPath } = await workspacePath(await getWorkspaceRoot(), projectPath, "directory");
 
         const descriptor = await generatePackage(rootPath);
 
@@ -61,15 +53,16 @@ export const uploadTool: MCPToolDefinition = {
         bytes = await zip(rootPath, descriptor.files);
       }
       else if (zipPath) {
-        if (!fs.existsSync(zipPath)) {
-          throw new Error(`Zip file not found at path: ${zipPath}`);
-        }
-
-        bytes = fs.readFileSync(zipPath);
+        const { path, stats } = await workspacePath(await getWorkspaceRoot(), zipPath, "file");
+        if (extname(zipPath).toLowerCase() !== ".zip") throw new Error("zipPath must name a .zip file.");
+        assertUploadSize(stats.size);
+        bytes = await bufferUpload(createReadStream(path));
       } 
       else {
-        bytes = Buffer.from(zipBase64!, "base64");
+        bytes = decodeZipBase64(zipBase64!);
       }
+
+      assertUploadSize(bytes.length);
 
       // FaaS rejects file parts whose MIME type is neither application/x-zip-compressed
       // nor application/zip, and api.upload only keeps it for a Blob, not a Readable.

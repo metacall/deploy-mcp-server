@@ -1,4 +1,5 @@
-import { api } from "../../protocol/client.js";
+import { api, local } from "../../protocol/client.js";
+import { validateLocalRepository } from "../../utils/repository.js";
 import { createToolHandler } from "../toolFactory.js";
 import { AddSchema } from "../schemas/add.schema.js";
 import type { MCPToolDefinition } from "../types.js";
@@ -15,6 +16,7 @@ export const addTool: MCPToolDefinition = {
   execute: createToolHandler(
     AddSchema,
     async ({ url, branch, jsons = [] }) => {
+      if (local) validateLocalRepository(url, branch);
 
       const result = await api.add(
         url,

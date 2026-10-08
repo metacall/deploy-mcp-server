@@ -1,4 +1,5 @@
-import { api } from "../../protocol/client.js";
+import { api, local } from "../../protocol/client.js";
+import { validateLocalRepository } from "../../utils/repository.js";
 import { createToolHandler } from "../toolFactory.js";
 import { BranchListSchema } from "../schemas/branchList.schema.js";
 import type { MCPToolDefinition } from "../types.js";
@@ -15,6 +16,7 @@ export const branchListTool: MCPToolDefinition = {
   execute: createToolHandler(
     BranchListSchema,
     async ({ url }) => {
+      if (local) validateLocalRepository(url);
 
       const branches = await api.branchList(url);
 

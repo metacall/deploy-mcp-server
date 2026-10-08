@@ -1,5 +1,6 @@
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import type { GetPromptResult, Prompt } from "@modelcontextprotocol/sdk/types.js";
+import { redactCredentials } from "../protocol/client.js";
 
 export const prompts: Prompt[] = [
   {
@@ -24,7 +25,7 @@ export const prompts: Prompt[] = [
 export function getPrompt(name: string, args: Record<string, string> = {}): GetPromptResult {
   const prompt = prompts.find(prompt => prompt.name === name);
   if (!prompt) {
-    throw new McpError(ErrorCode.InvalidParams, `Unknown prompt: ${name}`);
+    throw new McpError(ErrorCode.InvalidParams, `Unknown prompt: ${redactCredentials(name)}`);
   }
   for (const argument of prompt.arguments ?? []) {
     if (argument.required && !args[argument.name]?.trim()) {
@@ -46,5 +47,5 @@ export function getPrompt(name: string, args: Record<string, string> = {}): GetP
     "Use await only for asynchronous functions on cloud targets; local FaaS does not support await."
   ].join("\n");
 
-  return { messages: [{ role: "user", content: { type: "text", text } }] };
+  return { messages: [{ role: "user", content: { type: "text", text: redactCredentials(text) } }] };
 }

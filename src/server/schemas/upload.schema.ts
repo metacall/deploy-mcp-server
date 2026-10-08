@@ -1,12 +1,16 @@
 import { z } from "zod";
+import { isAbsolute } from "node:path";
+import { MAX_UPLOAD_BASE64_LENGTH } from "../../utils/uploadLimits.js";
+
+const absolutePath = z.string().min(1).refine(isAbsolute, "Upload paths must be absolute.");
 
 export const UploadSchema = z
   .object({
     name: z.string().min(1),
 
-    projectPath: z.string().optional().describe("Absolute filesystem path to a local project directory accessible by the MCP server. Its files, runners and MetaCall JSONs are detected and zipped automatically. Example: /home/user/app"),
-    zipPath: z.string().optional().describe("Absolute filesystem path to a zip file accessible by the MCP server. Example: /home/user/app.zip"),
-    zipBase64: z.string().optional(),
+    projectPath: absolutePath.optional().describe("Absolute project directory inside the server's configured METACALL_WORKSPACE_ROOT. Files, runners and MetaCall JSONs are detected and zipped automatically."),
+    zipPath: absolutePath.optional().describe("Absolute path to a regular .zip file inside the server's configured METACALL_WORKSPACE_ROOT."),
+    zipBase64: z.string().min(1).max(MAX_UPLOAD_BASE64_LENGTH).optional(),
 
     jsons: z.array(z.any()).optional(),
     runners: z.array(z.string()).optional()
