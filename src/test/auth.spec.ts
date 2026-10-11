@@ -33,8 +33,9 @@ describe("Cloud authentication", function () {
       args: ["--dns-result-order=ipv4first", "dist/index.js"],
       env: {
         METACALL_TOKEN: token,
-        // The trailing dot keeps the fake backend on loopback while exercising cloud mode.
-        METACALL_BASE_URL: `http://${local ? "localhost" : "localhost."}:${(backend.address() as AddressInfo).port}`
+        // A numeric IPv4-mapped address stays on loopback without DNS while
+        // exercising cloud mode; literal localhost selects the local path.
+        METACALL_BASE_URL: `http://${local ? "localhost" : "[::ffff:127.0.0.1]"}:${(backend.address() as AddressInfo).port}`
       }
     }));
   };
@@ -85,11 +86,15 @@ describe("Cloud authentication", function () {
     await call("refresh");
     await call("validate");
     await client.readResource({ uri: "metacall://deployments" });
+    await client.close();
+    await connect();
+    await call("validate");
     deepStrictEqual(requests, [
       { url: "/validate", authorization: "jwt token-a" },
       { url: "/api/account/refresh-token", authorization: "jwt token-a" },
       { url: "/validate", authorization: "jwt token-b" },
-      { url: "/api/inspect", authorization: "jwt token-b" }
+      { url: "/api/inspect", authorization: "jwt token-b" },
+      { url: "/validate", authorization: "jwt token-a" }
     ]);
   });
 
