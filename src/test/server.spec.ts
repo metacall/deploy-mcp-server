@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { deepStrictEqual, match, ok, rejects, strictEqual } from "node:assert";
+import { deepStrictEqual, doesNotMatch, match, ok, rejects, strictEqual } from "node:assert";
 
 // The tools barrel intentionally leaves out "ready" (unavailable in the dashboard)
 // and "invoke" (superseded by "call" and "await"), so neither must be advertised.
@@ -97,6 +97,22 @@ describe("Unit MCP Server", function () {
     // The "exactly one of projectPath, zipPath or zipBase64" refinement is a Zod effect
     // and does not survive the JSON Schema conversion, so clients only see "name" required.
     deepStrictEqual(upload?.inputSchema.required, ["name"]);
+  });
+
+  it("tools/list subscription counts describe entries rather than deployment usage", () => {
+    const description = tools.find(tool => tool.name === "listSubscriptions")?.description ?? "";
+
+    match(description, /subscription entries.*per plan/i);
+    match(description, /usageCount/);
+    match(description, /not.*deployment.*(?:usage|occupancy)/i);
+    doesNotMatch(description, /deployments.*currently using|current plan usage/i);
+  });
+
+  it("tools/list deploy does not claim one deployment per plan type", () => {
+    const description = tools.find(tool => tool.name === "deploy")?.description ?? "";
+
+    match(description, /Essential.*Standard.*Premium/);
+    doesNotMatch(description, /one deployment per|only allows|unused|already in use|it will fail/i);
   });
 
   it("resources/list", async () => {
