@@ -147,7 +147,7 @@ describe("Upload filesystem boundary", () => {
       names.push(bytes.toString("utf8", entry + 46, entry + 46 + length));
       entry += 46 + length + bytes.readUInt16LE(entry + 30) + bytes.readUInt16LE(entry + 32);
     }
-    deepStrictEqual(names.sort(), [".env", "alias.js", "src/index.js"]);
+    deepStrictEqual(names.sort(), [".env", "alias.js", "metacall-node.json", "src/index.js"]);
   });
 
   it("allows base64 without filesystem configuration", async () => {
@@ -163,6 +163,22 @@ describe("Upload filesystem boundary", () => {
   it("stops buffering an archive when its byte ceiling is exceeded", async () => {
     await writeFile(join(workspace, "index.js"), "exports.value = 1;");
     await rejects(zip(workspace, ["index.js"], 20), /upload.*limit|upload.*exceed/i);
+  });
+
+  it("includes generated files in the archive byte ceiling", async () => {
+    await writeFile(join(workspace, "index.js"), "exports.value = 1;");
+    const original = await zip(workspace, ["index.js"]);
+    await rejects(zip(workspace, ["index.js"], original.length, {
+      "metacall-node.json": '{"language_id":"node","path":".","scripts":["index.js"]}'
+    }), /upload.*limit|upload.*exceed/i);
+  });
+
+  it("rejects escaping or conflicting generated archive entries", async () => {
+    await writeFile(join(workspace, "index.js"), "exports.value = 1;");
+    for (const name of ["../metacall-node.json", join(outside, "metacall-node.json")]) {
+      await rejects(zip(workspace, ["index.js"], undefined, { [name]: "{}" }), /Invalid project archive path/);
+    }
+    await rejects(zip(workspace, ["index.js"], undefined, { "index.js": "{}" }), /conflicts/);
   });
 
   it("closes opened sources when a later archive name is rejected", async function () {

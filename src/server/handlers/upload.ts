@@ -50,7 +50,11 @@ export const uploadTool: MCPToolDefinition = {
         }
 
         runners = descriptor.runners;
-        bytes = await zip(rootPath, descriptor.files);
+        const generatedFiles = Object.fromEntries(jsons.map(json => [
+          `metacall-${json.language_id}.json`, JSON.stringify(json)
+        ]));
+        bytes = await zip(rootPath, descriptor.files, undefined, generatedFiles);
+        jsons = [];
       }
       else if (zipPath) {
         const { path, stats } = await workspacePath(await getWorkspaceRoot(), zipPath, "file");

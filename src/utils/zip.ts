@@ -7,7 +7,12 @@ import { bufferUpload, MAX_UPLOAD_BYTES } from "./uploadLimits.js";
 
 // Same layout as metacall/deploy: files come from protocol's generatePackage, already
 // relative to the project root with POSIX separators, and are archived under that name.
-export const zip = async (source: string, files: string[], maxBytes = MAX_UPLOAD_BYTES): Promise<Buffer> => {
+export const zip = async (
+  source: string,
+  files: string[],
+  maxBytes = MAX_UPLOAD_BYTES,
+  generatedFiles: Record<string, string> = {}
+): Promise<Buffer> => {
   const root = await getWorkspaceRoot();
   // Validate every discovered file before opening any archive source. Protocol
   // discovery itself follows symlinks; this check prevents packaging escapes.
@@ -16,6 +21,10 @@ export const zip = async (source: string, files: string[], maxBytes = MAX_UPLOAD
     const path = resolve(source, name);
     if (isAbsolute(name) || !isWithin(source, path)) throw new Error("Invalid project archive path.");
     entries.push({ name, ...await workspacePath(root, path, "file") });
+  }
+  for (const name of Object.keys(generatedFiles)) {
+    if (isAbsolute(name) || !isWithin(source, resolve(source, name))) throw new Error("Invalid project archive path.");
+    if (files.includes(name)) throw new Error("Generated archive entry conflicts with a project file.");
   }
 
   const archive = new ZipFile();
@@ -35,6 +44,9 @@ export const zip = async (source: string, files: string[], maxBytes = MAX_UPLOAD
         input.on("error", error => archive.emit("error", error));
         callback(null, input);
       });
+    }
+    for (const [name, contents] of Object.entries(generatedFiles)) {
+      archive.addBuffer(Buffer.from(contents), name);
     }
     archive.end();
     return await bufferUpload(output, maxBytes);

@@ -112,7 +112,7 @@ For `deploy`, `resourceType` is `Package` or `Repository`. Use the `packageId` r
 
 ### Project packaging
 
-`projectPath` packages files respecting `.gitignore`, detects dependency runners and uses existing `metacall.json` / `metacall-*.json` files. When none exist, it generates configurations for detected script languages, excluding the static-file catch-all. A project with no scripts needs its own MetaCall JSON. Generated configurations are sent with the upload; the source directory is not changed.
+`projectPath` packages files respecting `.gitignore`, detects dependency runners and uses existing `metacall.json` / `metacall-*.json` files. When none exist, it generates configurations for detected script languages, excluding the static-file catch-all. A project with no scripts needs its own MetaCall JSON. Generated configurations are embedded in the ZIP; the source directory is not changed.
 
 With `projectPath`, omit `jsons` and `runners`. Existing zip uploads may supply them explicitly; supported dependency runners are `nodejs`, `python`, `ruby` and `csharp`. `zipPath` must name a regular `.zip` file. Uploads are limited to 150,000,000 bytes.
 

@@ -1,7 +1,9 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { deepStrictEqual, match, ok, rejects, strictEqual } from "node:assert";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { findMetaCallJsons } from "@metacall/protocol";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -40,6 +42,7 @@ const otherDeployment = { ...deployment, prefix: "other-prefix", suffix: "other-
 const secret = "s3cr3t-refresh-token";
 
 const routes: Record<string, [number, string]> = {
+  "/api/billing/list-subscriptions": [200, JSON.stringify(["Essential", "Essential", "Standard"])],
   "/api/package/create": [200, JSON.stringify({ id: "uploaded-package" })],
   "/api/deploy/create": [200, JSON.stringify({ prefix: "test-prefix", suffix: "test-suffix", version: "v1" })],
   "/api/deploy/logs": [200, "TODO: Implement Logs..."],
@@ -283,6 +286,17 @@ describe("Unit Protocol Client", function () {
     strictEqual(requests.length, start);
   });
 
+  it("listSubscriptions counts entries per plan and preserves usageCount", async () => {
+    deepStrictEqual(await callTool("listSubscriptions", {}), {
+      totalPlans: 2,
+      plans: [
+        { id: "Essential", usageCount: 2 },
+        { id: "Standard", usageCount: 1 }
+      ]
+    });
+    deepStrictEqual(requests.map(request => request.url), ["/api/billing/list-subscriptions"]);
+  });
+
   it("upload zipBase64", async () => {
     const result = await callTool("upload", {
       name: "uploaded-package",
@@ -313,6 +327,25 @@ describe("Unit Protocol Client", function () {
     strictEqual(result.packageId, "uploaded-package");
   });
 
+  for (const mode of ["zipPath", "zipBase64"]) {
+    it(`upload ${mode} preserves archive bytes and explicit metadata`, async () => {
+      const bytes = Buffer.from("PK\x00legacy archive", "latin1");
+      const jsons = [{ language_id: "node", path: "app", scripts: ["hello.js"] }];
+      const runners = ["nodejs"];
+      const zipPath = join(await mkdtemp(join(testWorkspace, "zip-")), "app.zip");
+      await writeFile(zipPath, bytes);
+      await callTool("upload", {
+        name: "uploaded-package", jsons, runners,
+        ...(mode === "zipPath" ? { zipPath } : { zipBase64: bytes.toString("base64") })
+      });
+
+      const fields = multipart(requests.find(request => request.url === "/api/package/create")!.body);
+      deepStrictEqual(Buffer.from(fields.raw, "latin1"), bytes);
+      deepStrictEqual(JSON.parse(fields.jsons), jsons);
+      deepStrictEqual(JSON.parse(fields.runners), runners);
+    });
+  }
+
   it("upload projectPath", async () => {
     const projectPath = await project({
       ".git/HEAD": "ref: refs/heads/master",
@@ -338,16 +371,38 @@ describe("Unit Protocol Client", function () {
 
     match(body, /name="raw"[\s\S]*?Content-Type: application\/x-zip-compressed/);
     deepStrictEqual(JSON.parse(fields.runners).sort(), ["nodejs", "python"]);
-    deepStrictEqual(JSON.parse(fields.jsons), [
-      { language_id: "node", path: ".", scripts: ["index.js"] },
-      { language_id: "py", path: ".", scripts: ["src/index.py"] }
-    ]);
-    deepStrictEqual(unzip(Buffer.from(fields.raw, "latin1")), {
+    deepStrictEqual(JSON.parse(fields.jsons), []);
+    const archived = unzip(Buffer.from(fields.raw, "latin1"));
+    deepStrictEqual(archived, {
       "index.js": "module.exports = { sum: (a, b) => a + b };",
       "package.json": "{}",
       "requirements.txt": "",
-      "src/index.py": "def add(a, b):\n\treturn a + b\n"
+      "src/index.py": "def add(a, b):\n\treturn a + b\n",
+      "metacall-node.json": JSON.stringify({ language_id: "node", path: ".", scripts: ["index.js"] }),
+      "metacall-py.json": JSON.stringify({ language_id: "py", path: ".", scripts: ["src/index.py"] })
     });
+    deepStrictEqual(findMetaCallJsons(Object.keys(archived)).sort(), ["metacall-node.json", "metacall-py.json"]);
+  });
+
+  it("upload projectPath embeds a configuration that loads index.js without changing the source", async () => {
+    const projectPath = await project({
+      "index.js": "module.exports = { subtract: (a, b) => a - b };",
+      "package.json": '{"name":"fixture","version":"1.0.0"}'
+    });
+    await callTool("upload", { name: "uploaded-package", projectPath });
+    const fields = multipart(requests.find(request => request.url === "/api/package/create")!.body);
+    const archived = unzip(Buffer.from(fields.raw, "latin1"));
+    deepStrictEqual(findMetaCallJsons(Object.keys(archived)), ["metacall-node.json"]);
+    deepStrictEqual(JSON.parse(fields.jsons), []);
+    deepStrictEqual(JSON.parse(fields.runners), ["nodejs"]);
+    deepStrictEqual((await readdir(projectPath)).sort(), ["index.js", "package.json"]);
+
+    const extracted = await project(archived);
+    const config = JSON.parse(archived["metacall-node.json"]);
+    strictEqual(config.language_id, "node");
+    deepStrictEqual(config.scripts, ["index.js"]);
+    const exports = createRequire(import.meta.url)(join(extracted, config.path, config.scripts[0]));
+    strictEqual(exports.subtract(10, 3), 7);
   });
 
   it("upload projectPath metacall.json", async () => {
@@ -370,6 +425,22 @@ describe("Unit Protocol Client", function () {
     deepStrictEqual(JSON.parse(fields.jsons), []);
     deepStrictEqual(JSON.parse(fields.runners), []);
     strictEqual(unzip(Buffer.from(fields.raw, "latin1"))["metacall.json"], metacall);
+  });
+
+  it("upload projectPath preserves a named user configuration", async () => {
+    const metacall = JSON.stringify({ language_id: "node", path: "src", scripts: ["custom.js"] }, null, 2);
+    const files = {
+      "index.js": "module.exports = { ignored: () => 0 };",
+      "src/custom.js": "module.exports = { selected: () => 1 };",
+      "package.json": "{}",
+      "metacall-node.json": metacall
+    };
+    const projectPath = await project(files);
+    await callTool("upload", { name: "uploaded-package", projectPath });
+    const fields = multipart(requests.find(request => request.url === "/api/package/create")!.body);
+    deepStrictEqual(unzip(Buffer.from(fields.raw, "latin1")), files);
+    deepStrictEqual(JSON.parse(fields.jsons), []);
+    deepStrictEqual(JSON.parse(fields.runners), ["nodejs"]);
   });
 
   it("upload invalid source", async () => {
