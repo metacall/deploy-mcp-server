@@ -20,10 +20,13 @@ let activeCredential = process.env.METACALL_TOKEN;
 export let api: API = metacallProtocol(activeCredential, baseURL);
 
 // metacall/faas has no await/refresh and only a logs placeholder. Protocol only routes
-// invocations to it when the hostname is literally localhost, not 127.0.0.1 or [::1].
-export const local = ["localhost", "127.0.0.1", "[::1]"].includes(
-  new URL(baseURL).hostname
-);
+// invocations to it when the hostname is literally localhost; loopback IPs would send
+// local calls to MetaCall Cloud, so reject them rather than run in a split mode.
+const hostname = new URL(baseURL).hostname;
+if (["127.0.0.1", "[::1]"].includes(hostname)) {
+  throw new Error("METACALL_BASE_URL must use localhost for local FaaS: @metacall/protocol routes local invocations only for the hostname localhost");
+}
+export const local = hostname === "localhost";
 
 let refreshing: Promise<void> | undefined;
 let renewAfter = 0;

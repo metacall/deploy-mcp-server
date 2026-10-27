@@ -1,7 +1,10 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { deepStrictEqual, doesNotMatch, match, ok, rejects, strictEqual } from "node:assert";
+import { deepStrictEqual, doesNotMatch, match, notStrictEqual, ok, rejects, strictEqual } from "node:assert";
+import { spawnSync } from "node:child_process";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 
 // The tools barrel intentionally leaves out "ready" (unavailable in the dashboard)
 // and "invoke" (superseded by "call" and "await"), so neither must be advertised.
@@ -204,6 +207,36 @@ describe("Unit MCP Server", function () {
       deepStrictEqual(tools.find(tool => tool.name === name)?.inputSchema.required, ["function"]);
       await rejects(client.callTool({ name, arguments: { function: "subtract" } }),
         /No active deployment.*suffix.*deploy.*inspect/i);
+    }
+  });
+});
+
+describe("Local FaaS base URL", () => {
+  it("rejects loopback IPs that protocol would route to MetaCall Cloud", async () => {
+    const token = "loopback-secret-token";
+    const requests: string[] = [];
+    const backend = createServer((req, res) => {
+      requests.push(req.url ?? "");
+      res.end();
+    });
+    await new Promise<void>(resolve => backend.listen(0, "127.0.0.1", resolve));
+    const { port } = backend.address() as AddressInfo;
+
+    try {
+      for (const host of ["127.0.0.1", "[::1]"]) {
+        const result = spawnSync(process.execPath, ["dist/index.js"], {
+          encoding: "utf8",
+          input: "",
+          timeout: 10000,
+          env: { ...process.env, METACALL_TOKEN: token, METACALL_BASE_URL: `http://${host}:${port}` }
+        });
+        notStrictEqual(result.status, 0, host);
+        match(result.stderr, /METACALL_BASE_URL must use localhost/, host);
+        ok(!result.stdout.includes(token) && !result.stderr.includes(token), `${host} must not expose the token`);
+      }
+      deepStrictEqual(requests, []);
+    } finally {
+      await new Promise<void>(resolve => backend.close(() => resolve()));
     }
   });
 });
