@@ -93,7 +93,7 @@ In PowerShell, enter the command on one line and replace `/tmp` with an existing
 | `deployEnabled` | — | Check deployment permission. |
 | `refresh` | — | Renew cloud authentication in memory. |
 | `listSubscriptions` | — | List account subscription plans. |
-| `listSubscriptionsDeploys` | — | List deployments using subscriptions. |
+| `listSubscriptionsDeploys` | — | List deployments using subscriptions (see note below). |
 | `inspect` | — | List deployments and exported functions. |
 | `inspectByName` | `suffix` | Inspect and select a deployment. |
 | `upload` | `name`, exactly one of `projectPath` / `zipPath` / `zipBase64`, `jsons?`, `runners?` | Upload a package. |
@@ -106,7 +106,9 @@ In PowerShell, enter the command on one line and replace `/tmp` with an existing
 | `await` | `function`, `suffix?`, `args?` | Invoke an async function on cloud. |
 | `logs` | `suffix`, `container` | Read cloud runtime logs. |
 
-For `deploy`, `resourceType` is `Package` or `Repository`. Use the `packageId` returned by `upload` or the `repositoryId` returned by `add` as `name`. Cloud deployments require an available subscription plan; check `inspect`, `listSubscriptions` and `listSubscriptionsDeploys` first. `env` defaults to `[]` and contains `{ "name": "KEY", "value": "value" }` entries. `deployDelete.version` defaults to `v1`.
+For `deploy`, `resourceType` is `Package` or `Repository`. Use the `packageId` returned by `upload` or the `repositoryId` returned by `add` as `name`. `release` is a deployment release identifier, not a Git branch. Cloud deployments require an available subscription plan; check `inspect` and `listSubscriptions` first. `env` defaults to `[]` and contains `{ "name": "KEY", "value": "value" }` entries. `deployDelete.version` defaults to `v1`.
+
+> **Temporary limitation:** `@metacall/protocol` 0.1.35 sends `listSubscriptionsDeploys` to the subscription list endpoint, so it currently returns subscription plan entries rather than deployment associations. This is fixed upstream in [metacall/protocol#61](https://github.com/metacall/protocol/pull/61) but not yet released.
 
 `call` and `await` take a named-argument object in `args`. Omitting `suffix` uses the active deployment, selected by a successful `deploy`, `inspectByName` or invocation with an explicit suffix. Local calls order arguments by the inspected signature when complete and unambiguous; otherwise input order is preserved. Inspection may include MetaCall runtime functions. Cloud log responses are limited to 64 KiB and redact credentials known to the server.
 
@@ -151,7 +153,7 @@ docker run --rm -d \
 curl http://localhost:9100/api/readiness
 ```
 
-Wait for readiness to return `OK` before deploying; retry the check while FaaS starts. FaaS listens on port `9000` inside the container; this maps host `9100` to container `9000`. Another free host port works if `METACALL_BASE_URL` matches. Use literal `localhost` with protocol 0.1.35.
+Wait for readiness to return `OK` before deploying; retry the check while FaaS starts. FaaS listens on port `9000` inside the container; this maps host `9100` to container `9000`. Another free host port works if `METACALL_BASE_URL` matches. Use literal `localhost`; the server rejects `127.0.0.1` and `[::1]` at startup.
 
 In PowerShell, run `docker run` on one line, omit the Bash-only cleanup redirection, and use `curl.exe` for readiness. Docker Desktop must be running.
 
@@ -176,7 +178,7 @@ Run these tools in order with `METACALL_TOKEN=local` and `METACALL_BASE_URL=http
 | Step | Tool | Input |
 | --- | --- | --- |
 | Upload | `upload` | `{"name":"mcp-local-demo","projectPath":"/tmp/mcp-local-demo"}` |
-| Deploy | `deploy` | `{"name":"mcp-local-demo","plan":"Essential","resourceType":"Package","release":"main","version":"v1"}` |
+| Deploy | `deploy` | `{"name":"mcp-local-demo","plan":"Essential","resourceType":"Package","release":"demo","version":"v1"}` |
 | Inspect | `inspect` | `{}` |
 | Call | `call` | `{"suffix":"mcp-local-demo","function":"subtract","args":{"b":3,"a":10}}` |
 | Delete | `deployDelete` | `{"suffix":"mcp-local-demo"}` |
@@ -194,7 +196,7 @@ docker stop mcp-faas-e2e
 ### Local limitations
 
 - `await`, `logs` and `refresh` return unsupported-operation errors locally. Local `call` also waits for async results.
-- Protocol 0.1.35 requires literal `localhost` for local invocation.
+- `@metacall/protocol` routes local invocations only for the hostname `localhost`, so `127.0.0.1` and `[::1]` base URLs are rejected at startup.
 - Unignored `.env` files may be packaged; add sensitive files to the project's `.gitignore`.
 - Path uploads require `METACALL_WORKSPACE_ROOT` and absolute paths.
 - Upload names must be unique; delete before reusing a deployment name.

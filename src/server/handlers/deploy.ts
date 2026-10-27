@@ -12,10 +12,11 @@ Deploy a package or repository to MetaCall Cloud.
 
 Parameters:
 - name:
-    - For ResourceType.Package -> package name
-    - For ResourceType.Repository -> The exact "id" returned by the Add repository tool. Do NOT use the Git URL.
+    - For resourceType "Package" -> the packageId returned by the upload tool
+    - For resourceType "Repository" -> The exact "id" returned by the Add repository tool. Do NOT use the Git URL.
+- resourceType: "Package" or "Repository".
 - plan: Subscription plan type (Essential, Standard, or Premium).
-- release: branch name (e.g. main)
+- release: deployment release identifier (e.g. a timestamp or label). It is not a Git branch.
 - version: deployment version (e.g. v1)
 `,
   schema: DeploySchema,
