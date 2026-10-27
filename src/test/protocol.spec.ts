@@ -633,6 +633,18 @@ describe("Unit Protocol Client", function () {
     strictEqual(requests.length, start);
   });
 
+  it("delete version defaults to v1", async () => {
+    deepStrictEqual(await callTool("deployDelete", { suffix: "test-suffix" }), {
+      message: "Deployment deleted successfully",
+      deployment: { prefix: "test-prefix", suffix: "test-suffix", version: "v1" },
+      result: "deleted"
+    });
+    deepStrictEqual(requests.at(-1), {
+      url: "/api/deploy/delete",
+      body: '{"prefix":"test-prefix","suffix":"test-suffix","version":"v1"}'
+    });
+  });
+
   it("local unsupported", async () => {
     const start = requests.length;
     const tools: [string, Record<string, unknown>][] = [
