@@ -3,12 +3,12 @@ import { createToolHandler } from "../toolFactory.js";
 import { ListSubscriptionsSchema } from "../schemas/listSubscriptions.schema.js";
 import type { MCPToolDefinition } from "../types.js";
 
-//listSubscriptions tool definition to retrieve all subscription plans available in the MetaCall account and their usage count.
+// List available subscription entries grouped by plan.
 export const listSubscriptionsTool: MCPToolDefinition = {
   name: "listSubscriptions",
 
   description:
-  "Retrieves all subscription plans available in the MetaCall account and shows how many deployments are currently using each plan. Use this tool when you need to understand available plans or check current plan usage before deploying.",
+  "Lists subscription entries per plan in the MetaCall account. The usageCount field counts subscription entries, not deployment usage or occupancy.",
 
   schema: ListSubscriptionsSchema,
 

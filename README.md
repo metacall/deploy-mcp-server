@@ -1,259 +1,221 @@
 # MetaCall Deploy MCP Server
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server implemented in TypeScript on top of the [`metacall/protocol`](https://github.com/metacall/protocol) API. It exposes the complete [MetaCall FaaS](https://dashboard.metacall.io) surface as MCP tools.
+A [Model Context Protocol](https://modelcontextprotocol.io) server for [MetaCall FaaS](https://github.com/metacall/faas), using [`@metacall/protocol`](https://github.com/metacall/protocol) over stdio. MCP clients can upload projects, manage deployments and invoke functions on MetaCall Cloud or local FaaS. Functions run in FaaS through MetaCall Core.
 
----
+## Features
 
-## Architecture
+- Deployment creation, readiness polling, inspection and deletion
+- Project packaging with runner detection and MetaCall JSON generation
+- Function invocation through `call` and cloud `await`
+- Local FaaS support
+- Session context with an active deployment and function catalog
+- Deployment resources and deployment/invocation prompts
 
-```
-┌────────────────────────────┐
-│         MCP Client         │
-│ (CLI / IDE / Local LLM)    │
-└─────────────┬──────────────┘
-              │ (JSON-RPC over stdio)
-              ▼
-┌────────────────────────────┐
-│      MCP Server (TS)       │
-│  - Tool Router             │
-│  - Zod Validation          │
-│  - Tool Handlers           │
-│  - Error Boundary          │
-└─────────────┬──────────────┘
-              │ (Function Calls)
-              ▼
-┌────────────────────────────┐
-│      Protocol Client       │
-│  (metacall/protocol API)   │
-└─────────────┬──────────────┘
-              │ (Fetch REST)
-              ▼
-┌────────────────────────────┐
-│        MetaCall FaaS       │
-│  (Deploy + Runtime Layer)  │
-└────────────────────────────┘
-```
+## Requirements
 
----
+- Node.js 18 or newer; Node.js 24 is used in CI
+- npm
+- A MetaCall token for cloud access
+- Docker for local FaaS (Docker Desktop on Windows)
 
-## Exposed Tools
+## Install
 
-### System
-
-| Tool | Description |
-|------|-------------|
-| `refresh` | Refresh the MetaCall JWT authentication token |
-| `ready` | Check if the server is ready |
-| `validate` | Validate the current auth token |
-| `deployEnabled` | Check if deployments are enabled |
-
-### Subscriptions
-
-| Tool | Description |
-|------|-------------|
-| `listSubscriptions` | List all active subscriptions |
-| `listSubscriptionsDeploys` | List deployments for subscriptions |
-
-### Deployment
-
-| Tool | Description |
-|------|-------------|
-| `inspect` | Inspect all deployments |
-| `inspectByName` | Inspect a deployment by name |
-| `upload` | Upload a zip package/blob into the FaaS |
-| `add` | Add a new deployment |
-| `deploy` | Trigger a deployment |
-| `deployDelete` | Delete a deployment |
-| `logs` | Retrieve deployment logs |
-
-### Repository
-
-| Tool | Description |
-|------|-------------|
-| `branchList` | List branches in the repository |
-| `fileList` | List files in the repository |
-
-### Invocation
-
-| Tool | Description |
-|------|-------------|
-| `invoke` | Invoke a deployed function |
-| `call` | Call a function directly |
-| `await` | Await an async function result |
-
----
-
-## Design Principles
-
-- **1:1 abstraction** over the protocol API
-- **Async-safe** Promise-based handlers
-- **Structured error boundary** for consistent error handling
-- **Retry support** via `waitFor`
-- **Zod-based input validation** for all tool inputs
-- **Clean separation of concerns** across layers
-
-## Installation & Setup
-
-### Prerequisites
-- **Node.js**: v18 or higher.
-- **MetaCall Token**: You need an active authentication token. You can get this by logging into [dashboard.metacall.io](https://dashboard.metacall.io).
-
----
-
-### 1. Build the Server
-
-First, clone this repository to your local machine, install the dependencies, and compile the TypeScript code:
+From the repository directory:
 
 ```bash
-git clone https://github.com/metacall/deploy-mcp-server.git
-cd deploy-mcp-server
-npm install
+npm ci
 npm run build
 ```
 
-> **Note:** Get the absolute path of your `deploy-mcp-server/dist/index.js` file as we will need it for the client configuration.
+## Configuration
 
----
+Set these variables in the server process environment. The server does not load `.env` files; `.env.example` is a reference only.
 
-### 2. Client Configuration
+| Variable | Purpose |
+| --- | --- |
+| `METACALL_TOKEN` | Required startup token for cloud authentication; use `local` for local FaaS. |
+| `METACALL_BASE_URL` | Required API URL: `https://dashboard.metacall.io` for cloud or `http://localhost:9100` locally. |
+| `METACALL_WORKSPACE_ROOT` | Absolute, existing directory required for `projectPath` and `zipPath` uploads. Paths and resolved symlinks must stay within it. |
 
-The Model Context Protocol (MCP) allows us to use this server across various AI clients. Below are the setup instructions for **Claude Desktop** and **Google Antigravity**.
+`zipBase64` needs no filesystem access or workspace setting. Paths refer to the machine running the server. Choose a workspace containing only projects you intend to upload.
 
----
+## Running
 
-#### Option A: Claude Desktop
+With the environment configured, start the stdio server:
 
-1. Open your Claude Desktop configuration file based on your operating system:
-   - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - **Linux:** `~/.config/Claude/claude_desktop_config.json`
-   - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+```bash
+node dist/index.js
+```
 
-2. Add the MetaCall server to your `mcpServers` object. Replace the `args` path with the actual absolute path to `dist/index.js`, and insert your MetaCall token:
+## MCP client configuration
+
+For clients using an `mcpServers` configuration:
 
 ```json
 {
   "mcpServers": {
-    "metacall-faas": {
+    "metacall": {
       "command": "node",
-      "args": [
-        "/ABSOLUTE/PATH/TO/deploy-mcp-server/dist/index.js"
-      ],
+      "args": ["/absolute/path/to/deploy-mcp-server/dist/index.js"],
       "env": {
-        "METACALL_TOKEN": "your_jwt_token_here",
-        "METACALL_BASE_URL": "https://dashboard.metacall.io"
+        "METACALL_TOKEN": "your_token_here",
+        "METACALL_BASE_URL": "https://dashboard.metacall.io",
+        "METACALL_WORKSPACE_ROOT": "/absolute/path/to/projects"
       }
     }
   }
 }
 ```
 
-> **Windows Users:** Remember to use double backslashes. e.g., `C:\\Users\\Name\\deploy-mcp-server\\dist\\index.js`
+On Windows, use absolute paths such as `C:/projects` or escape backslashes in JSON. For local FaaS, set the token to `local` and the base URL to `http://localhost:9100`.
 
-3. Restart Claude Desktop.
+## MCP Inspector
 
----
+Run [MCP Inspector](https://github.com/modelcontextprotocol/inspector) with Node.js 24 from this repository after starting local FaaS:
 
-#### Option B: Google Antigravity
-
-1. Open your Antigravity configuration file based on your operating system:
-   - **macOS / Linux:** `~/.gemini/antigravity/mcp_config.json`
-   - **Windows:** `%USERPROFILE%\.gemini\antigravity\mcp_config.json`
-
-2. Add the exact same JSON configuration block used for Claude Desktop (above) into your `mcp_config.json` file:
-
-```json
-{
-  "mcpServers": {
-    "metacall-faas": {
-      "command": "node",
-      "args": [
-        "/ABSOLUTE/PATH/TO/deploy-mcp-server/dist/index.js"
-      ],
-      "env": {
-        "METACALL_TOKEN": "your_jwt_token_here",
-        "METACALL_BASE_URL": "https://dashboard.metacall.io"
-      }
-    }
-  }
-}
+```bash
+npx @modelcontextprotocol/inspector \
+  -e METACALL_TOKEN=local \
+  -e METACALL_BASE_URL=http://localhost:9100 \
+  -e METACALL_WORKSPACE_ROOT=/tmp \
+  node dist/index.js
 ```
 
-3. In the Antigravity UI, navigate to the **Agent Manager** panel, click **Manage MCP Servers**, and hit **Refresh**. The server will be connected.
+In PowerShell, enter the command on one line and replace `/tmp` with an existing absolute directory, such as `C:/projects`.
 
-# Upload Tool – How to Provide the Zip Package
+## Tools
 
-The upload tool sends a zip package to MetaCall Cloud before deploying it. The MetaCall API expects the package as a binary buffer. The zip file must be encoded as a base64 string and then reconstructed into a buffer inside the MCP server.
+`?` marks optional arguments; tools with no arguments accept `{}`.
 
-Base64 works across all MCP clients because it is simply a text representation of the binary zip file.
+| Tool | Arguments | Purpose |
+| --- | --- | --- |
+| `validate` | — | Validate authentication. |
+| `deployEnabled` | — | Check deployment permission. |
+| `refresh` | — | Renew cloud authentication in memory. |
+| `listSubscriptions` | — | List account subscription plans. |
+| `listSubscriptionsDeploys` | — | List deployments using subscriptions (see note below). |
+| `inspect` | — | List deployments and exported functions. |
+| `inspectByName` | `suffix` | Inspect and select a deployment. |
+| `upload` | `name`, exactly one of `projectPath` / `zipPath` / `zipBase64`, `jsons?`, `runners?` | Upload a package. |
+| `deploy` | `name`, `plan`, `resourceType`, `release`, `version`, `env?` | Deploy and wait for readiness. |
+| `add` | `url`, `branch`, `jsons?` | Register a Git repository. |
+| `deployDelete` | `suffix`, `version?` | Delete a deployment and its package. |
+| `branchList` | `url` | List repository branches. |
+| `fileList` | `url`, `branch` | List files in a repository branch. |
+| `call` | `function`, `suffix?`, `args?` | Invoke a function. |
+| `await` | `function`, `suffix?`, `args?` | Invoke an async function on cloud. |
+| `logs` | `suffix`, `container` | Read cloud runtime logs. |
 
-Two ways of providing the zip package are supported:
+For `deploy`, `resourceType` is `Package` or `Repository`. Use the `packageId` returned by `upload` or the `repositoryId` returned by `add` as `name`. `release` is a deployment release identifier, not a Git branch. Cloud deployments require an available subscription plan; check `inspect` and `listSubscriptions` first. `env` defaults to `[]` and contains `{ "name": "KEY", "value": "value" }` entries. `deployDelete.version` defaults to `v1`.
 
----
+> **Temporary limitation:** `@metacall/protocol` 0.1.35 sends `listSubscriptionsDeploys` to the subscription list endpoint, so it currently returns subscription plan entries rather than deployment associations. This is fixed upstream in [metacall/protocol#61](https://github.com/metacall/protocol/pull/61) but not yet released.
 
-## 1. zipBase64 (Recommended and works for all)
+`call` and `await` take a named-argument object in `args`. Omitting `suffix` uses the active deployment, selected by a successful `deploy`, `inspectByName` or invocation with an explicit suffix. Local calls order arguments by the inspected signature when complete and unambiguous; otherwise input order is preserved. Inspection may include MetaCall runtime functions. Cloud log responses are limited to 64 KiB and redact credentials known to the server.
 
-This is the portable method and works with all MCP clients such as Claude, antigravity and others.
+### Project packaging
 
-### Steps
+`projectPath` packages files respecting `.gitignore`, detects dependency runners and uses existing `metacall.json` / `metacall-*.json` files. When none exist, it generates configurations for detected script languages, excluding the static-file catch-all. A project with no scripts needs its own MetaCall JSON. Generated configurations are embedded in the ZIP; the source directory is not changed.
 
-1. Create a zip file containing your source code. The source files should be at the root of the zip archive.
+With `projectPath`, omit `jsons` and `runners`. Existing zip uploads may supply them explicitly; supported dependency runners are `nodejs`, `python`, `ruby` and `csharp`. `zipPath` must name a regular `.zip` file. Uploads are limited to 150,000,000 bytes.
 
-   Example structure:
-   ```
-   package.zip
-   └── abc.js
-   ```
+## Resources
 
-2. Convert the zip file to a base64 string.
+All resources return JSON. Reading them does not select or change the active deployment.
 
-   **Linux:**
-   ```bash
-   base64 package.zip
-   ```
+- `metacall://deployments`: current deployments from FaaS
+- `metacall://context`: session target, active deployment and function catalog
+- `metacall://deployments/{suffix}`: resource template for current deployment details
 
-   **macOS:**
-   ```bash
-   base64 package.zip
-   ```
+## Prompts
 
-   **Windows (PowerShell):**
-   ```powershell
-   [Convert]::ToBase64String([IO.File]::ReadAllBytes("absolute path of the zip file"))
-   ```
+Prompts provide guidance without executing tools or changing context.
 
-3. Pass the base64 string to the upload tool.
+- `deploy-project`: takes `projectPath` and `name` to guide upload and deployment
+- `invoke-function`: takes `function`, optional `suffix` and optional `args` as JSON **text** to guide invocation
 
-   Example tool input:
-   ```json
-   {
-     "name": "myPackage",
-     "zipBase64": "ABCDEF...",
-     "runners": ["node"]
-   }
-   ```
+## Local FaaS
 
-The MCP server will convert the base64 string back into a binary buffer and send it to the MetaCall API.
+Build and run upstream FaaS:
 
----
+```bash
+git clone https://github.com/metacall/faas.git
+cd faas
 
-## 2. zipPath (Local Development Only)
+docker compose build faas
 
-When the MCP server has direct access to the local filesystem (for example when testing locally or using tools like Antigravity), the zip file can be provided as a file path.
+docker rm -f mcp-faas-e2e 2>/dev/null || true
 
-Example:
-```json
-{
-  "name": "myPackage",
-  "zipPath": "./package.zip"
-}
+docker run --rm -d \
+  --name mcp-faas-e2e \
+  -p 9100:9000 \
+  metacall/faas
+
+curl http://localhost:9100/api/readiness
 ```
 
-The MCP server reads the file from disk using the provided path and uploads it to MetaCall.
+Wait for readiness to return `OK` before deploying; retry the check while FaaS starts. FaaS listens on port `9000` inside the container; this maps host `9100` to container `9000`. Another free host port works if `METACALL_BASE_URL` matches. Use literal `localhost`; the server rejects `127.0.0.1` and `[::1]` at startup.
 
-> **Note:** `zipPath` may not work with remote LLM clients like Claude because those clients cannot access files on the MCP server's filesystem.
+In PowerShell, run `docker run` on one line, omit the Bash-only cleanup redirection, and use `curl.exe` for readiness. Docker Desktop must be running.
 
----
+### Local example
 
-## Recommendation
+Create a temporary project outside this repository, within the configured workspace. For the `/tmp` Inspector example, use `/tmp/mcp-local-demo`. On Windows, substitute your project's absolute path.
 
-For compatibility across all MCP clients, using **`zipBase64`** is recommended.
+Save this as `index.js`:
+
+```js
+function subtract(a, b) {
+  return a - b;
+}
+
+module.exports = { subtract };
+```
+
+Add a `package.json` containing `{ "name": "mcp-local-demo", "version": "1.0.0" }` to exercise Node runner detection. No `metacall.json` is needed.
+
+Run these tools in order with `METACALL_TOKEN=local` and `METACALL_BASE_URL=http://localhost:9100`:
+
+| Step | Tool | Input |
+| --- | --- | --- |
+| Upload | `upload` | `{"name":"mcp-local-demo","projectPath":"/tmp/mcp-local-demo"}` |
+| Deploy | `deploy` | `{"name":"mcp-local-demo","plan":"Essential","resourceType":"Package","release":"demo","version":"v1"}` |
+| Inspect | `inspect` | `{}` |
+| Call | `call` | `{"suffix":"mcp-local-demo","function":"subtract","args":{"b":3,"a":10}}` |
+| Delete | `deployDelete` | `{"suffix":"mcp-local-demo"}` |
+
+Use the returned `packageId` for deployment and the returned suffix for call/delete. `deploy` reports readiness, `inspect` discovers `subtract(a, b)`, and the reversed input keys still produce `7`. After deletion, `inspect` no longer lists the deployment. Local FaaS ignores cloud plan/release selection and deploys as `v1`.
+
+Remove the temporary project after testing and stop FaaS:
+
+```bash
+docker stop mcp-faas-e2e
+```
+
+`--rm` removes the stopped container and its local deployment state.
+
+### Local limitations
+
+- `await`, `logs` and `refresh` return unsupported-operation errors locally. Local `call` also waits for async results.
+- `@metacall/protocol` routes local invocations only for the hostname `localhost`, so `127.0.0.1` and `[::1]` base URLs are rejected at startup.
+- Unignored `.env` files may be packaged; add sensitive files to the project's `.gitignore`.
+- Path uploads require `METACALL_WORKSPACE_ROOT` and absolute paths.
+- Upload names must be unique; delete before reusing a deployment name.
+- Repository tools need network access from FaaS. Local URLs must be HTTP(S) without credentials, query strings, fragments or shell metacharacters; branches must be valid, shell-safe Git branch names.
+
+## Authentication behavior
+
+`METACALL_TOKEN` seeds cloud authentication at startup. Before API requests, the server proactively refreshes a still-valid token nearing expiry. The renewed token stays in memory and serves subsequent tools and API-backed resource reads. It is never returned to the MCP client, written to disk or written back to `process.env.METACALL_TOKEN` or client configuration. Restarting uses the original configured token again. Recovery from a fully expired startup token is not guaranteed by upstream refresh semantics.
+
+## Development
+
+```bash
+npm ci
+npm run build
+npm test
+```
+
+Windows Developer Mode may be required for the symlink-based security tests.
+
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE).

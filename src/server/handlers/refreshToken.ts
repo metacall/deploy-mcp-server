@@ -1,4 +1,4 @@
-import { api } from "../../protocol/client.js";
+import { refreshAuthentication } from "../../protocol/client.js";
 import { createToolHandler } from "../toolFactory.js";
 import { RefreshTokenSchema } from "../schemas/refresh.schema.js";
 import type { MCPToolDefinition } from "../types.js";
@@ -12,11 +12,12 @@ export const refreshTokenTool: MCPToolDefinition = {
   execute: createToolHandler(
     RefreshTokenSchema,
     async () => {
-      const newToken = await api.refresh();
+      await refreshAuthentication();
       return {
-        token: newToken,
-        message: "Authentication token refreshed successfully"
+        success: true,
+        message: "Authentication refreshed successfully"
       };
-    }
+    },
+    { authenticate: false }
   )
 };

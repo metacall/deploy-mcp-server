@@ -1,4 +1,5 @@
-import { api } from "../../protocol/client.js";
+import { api, local } from "../../protocol/client.js";
+import { validateLocalRepository } from "../../utils/repository.js";
 import { createToolHandler } from "../toolFactory.js";
 import { FileListSchema } from "../schemas/fileList.schema.js";
 import type { MCPToolDefinition } from "../types.js";
@@ -15,6 +16,7 @@ export const fileListTool: MCPToolDefinition = {
   execute: createToolHandler(
     FileListSchema,
     async ({ url, branch }) => {
+      if (local) validateLocalRepository(url, branch);
 
       const files = await api.fileList(url, branch);
 

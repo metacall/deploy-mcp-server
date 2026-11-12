@@ -7,7 +7,7 @@ import type { MCPToolDefinition } from "../types.js";
 export const listSubscriptionsDeploysTool: MCPToolDefinition = {
   name: "listSubscriptionsDeploys",
   description:
-  "Retrieves deployments associated with the account's billing subscriptions. Use this tool to see which deployments are currently linked to subscription plans.",
+  "Retrieves deployments associated with the account's billing subscriptions. Note: @metacall/protocol 0.1.35 queries the subscription list endpoint, so this currently returns subscription plan entries rather than deployment associations (fixed upstream in metacall/protocol#61, not yet released).",
   schema: ListSubscriptionsDeploysSchema,
 
   execute: createToolHandler(

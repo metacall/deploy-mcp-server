@@ -2,11 +2,19 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
-  ListToolsRequestSchema
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  ReadResourceRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { tools } from "./server/handlers/index.js";
+import { resources, resourceTemplates, readResource } from "./server/resources.js";
+import { prompts, getPrompt } from "./server/prompts.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
+import { redactCredentials } from "./protocol/client.js";
 
 const server = new Server(
   {
@@ -15,9 +23,19 @@ const server = new Server(
   },
   {
     capabilities: {
-      tools: {}
+      tools: {},
+      resources: {},
+      prompts: {}
     }
   }
+);
+
+server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources }));
+server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({ resourceTemplates }));
+server.setRequestHandler(ReadResourceRequestSchema, request => readResource(request.params.uri));
+server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts }));
+server.setRequestHandler(GetPromptRequestSchema, async request =>
+  getPrompt(request.params.name, request.params.arguments)
 );
 
 // Discovery phase
@@ -37,7 +55,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   const tool = tools.find((t) => t.name === name);
   if (!tool) {
-    throw new Error(`Unknown tool: ${name}`);
+    throw new Error(`Unknown tool: ${redactCredentials(name)}`);
   }
 
   const result = await tool.execute(args);
@@ -46,7 +64,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     content: [
       {
         type: "text",
-        text: JSON.stringify(result, null, 2)
+        text: redactCredentials(JSON.stringify(result, null, 2))
       }
     ]
   };
