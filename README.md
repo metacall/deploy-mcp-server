@@ -4,7 +4,9 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [MetaCall
 
 ## Demo
 
-A screen recording of the server in action is available at [`demo/demo.mp4`](demo/demo.mp4).
+https://github.com/user-attachments/assets/dbf425c6-226a-4e8b-8f19-c428afec7e90
+
+The recording is also in the repo at [`demo/demo.mp4`](demo/demo.mp4).
 
 ## Features
 
