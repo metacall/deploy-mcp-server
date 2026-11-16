@@ -2,6 +2,12 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for [MetaCall FaaS](https://github.com/metacall/faas), using [`@metacall/protocol`](https://github.com/metacall/protocol) over stdio. MCP clients can upload projects, manage deployments and invoke functions on MetaCall Cloud or local FaaS. Functions run in FaaS through MetaCall Core.
 
+## Demo
+
+https://github.com/user-attachments/assets/dbf425c6-226a-4e8b-8f19-c428afec7e90
+
+The recording is also in the repo at [`demo/demo.mp4`](demo/demo.mp4).
+
 ## Features
 
 - Deployment creation, readiness polling, inspection and deletion
