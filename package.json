@@ -1,13 +1,27 @@
 {
-  "name": "metacall-mcp-server",
+  "name": "@metacall/deploy-mcp-server",
   "version": "1.0.0",
+  "description": "MCP server for deploying and invoking functions on MetaCall FaaS.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/metacall/deploy-mcp-server.git"
+  },
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "metacall-deploy-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/test"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc -w",
     "start": "node dist/index.js",
-    "test": "npm run --silent build && mocha dist/test"
+    "test": "npm run --silent build && mocha dist/test",
+    "prepublishOnly": "npm run --silent build"
   },
   "dependencies": {
     "@metacall/protocol": "0.1.35",
@@ -29,5 +43,8 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
