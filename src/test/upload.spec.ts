@@ -33,7 +33,9 @@ describe("Upload filesystem boundary", () => {
   // Windows denies symbolic link creation without Developer Mode or administrator
   // rights (EPERM). The symlink tests assert boundaries the code enforces on every
   // platform, so skip only when the fixture itself cannot be created; every other
-  // failure is a real error and must fail the test.
+  // failure is a real error and must fail the test. Directory junctions need no
+  // privileges on Windows, so directory fixtures use one instead of a real symlink
+  // and keep running there; only file-symlink fixtures are skipped.
   const symlinkFixture = async (
     context: { skip(): void },
     target: string,
@@ -41,7 +43,7 @@ describe("Upload filesystem boundary", () => {
     type?: "dir" | "file"
   ) => {
     try {
-      await symlink(target, path, type);
+      await symlink(target, path, process.platform === "win32" && type === "dir" ? "junction" : type);
     } catch (error) {
       if (process.platform === "win32" && (error as NodeJS.ErrnoException).code === "EPERM") context.skip();
       throw error;
