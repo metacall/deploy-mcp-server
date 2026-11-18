@@ -45,7 +45,16 @@ describe("Upload filesystem boundary", () => {
     try {
       await symlink(target, path, process.platform === "win32" && type === "dir" ? "junction" : type);
     } catch (error) {
-      if (process.platform === "win32" && (error as NodeJS.ErrnoException).code === "EPERM") context.skip();
+      if (process.platform === "win32" && (error as NodeJS.ErrnoException).code === "EPERM") {
+        // The skip must stay visible: the limitation is real, it just is not a
+        // code failure. Echo the original error so it is never silently lost.
+        process.stderr.write(
+          `WARNING skipping symlink boundary test: Windows denied symlink creation (EPERM). ` +
+          `Enable Developer Mode or run elevated for full coverage. Original error: ${error}\n`
+        );
+        context.skip();
+        return;
+      }
       throw error;
     }
   };
