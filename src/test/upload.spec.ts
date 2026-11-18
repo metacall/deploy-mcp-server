@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, symlink, truncate, writeFile } from "node:fs/promis
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { Readable } from "node:stream";
 import type { MCPToolDefinition } from "../server/types.js";
 import { zip } from "../utils/zip.js";
@@ -20,6 +20,10 @@ describe("Upload filesystem boundary", () => {
   let temporary: string;
   let workspace: string;
   let outside: string;
+  // Windows refuses to remove the current working directory, and its test temp
+  // root and the checkout can live on different drives (so path.relative cannot
+  // produce a relative path between them). Save and restore cwd around each test.
+  let originalCwd: string;
   const uploads: FormData[] = [];
 
   const upload = (source: Record<string, unknown>) =>
@@ -66,6 +70,7 @@ describe("Upload filesystem boundary", () => {
   });
 
   beforeEach(async () => {
+    originalCwd = process.cwd();
     temporary = await mkdtemp(join(tmpdir(), "mcp-upload-"));
     workspace = join(temporary, "workspace");
     outside = join(temporary, "workspace-other");
@@ -81,6 +86,8 @@ describe("Upload filesystem boundary", () => {
 
   afterEach(async () => {
     globalThis.fetch = originalFetch;
+    // Restore cwd first: Windows cannot delete the directory it is currently in.
+    process.chdir(originalCwd);
     await rm(temporary, { recursive: true, force: true });
   });
 
@@ -99,13 +106,17 @@ describe("Upload filesystem boundary", () => {
 
   it("rejects a relative workspace setting", async () => {
     await writeFile(join(workspace, "app.zip"), "PK");
-    process.env.METACALL_WORKSPACE_ROOT = relative(process.cwd(), workspace);
+    // chdir into the temp tree so the workspace path is relative on the same
+    // drive; path.relative across Windows drives yields an absolute path.
+    process.chdir(temporary);
+    process.env.METACALL_WORKSPACE_ROOT = "workspace";
     await denied({ zipPath: join(workspace, "app.zip") }, /workspace.*absolute|METACALL_WORKSPACE_ROOT.*absolute/i);
   });
 
   it("rejects relative upload paths", async () => {
     await writeFile(join(workspace, "app.zip"), "PK");
-    await denied({ zipPath: relative(process.cwd(), join(workspace, "app.zip")) }, /absolute/i);
+    process.chdir(temporary);
+    await denied({ zipPath: join("workspace", "app.zip") }, /absolute/i);
   });
 
   it("rejects projects outside the workspace", async () => {
