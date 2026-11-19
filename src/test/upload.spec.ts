@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, symlink, truncate, writeFile } from "node:fs/promis
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { Readable } from "node:stream";
 import type { MCPToolDefinition } from "../server/types.js";
 import { zip } from "../utils/zip.js";
@@ -20,6 +20,10 @@ describe("Upload filesystem boundary", () => {
   let temporary: string;
   let workspace: string;
   let outside: string;
+  // Windows refuses to remove the current working directory, and its test temp
+  // root and the checkout can live on different drives (so path.relative cannot
+  // produce a relative path between them). Save and restore cwd around each test.
+  let originalCwd: string;
   const uploads: FormData[] = [];
 
   const upload = (source: Record<string, unknown>) =>
@@ -30,6 +34,35 @@ describe("Upload filesystem boundary", () => {
     strictEqual(uploads.length, 0, "rejected input must not reach the FaaS API");
   };
 
+  // Windows denies symbolic link creation without Developer Mode or administrator
+  // rights (EPERM). The symlink tests assert boundaries the code enforces on every
+  // platform, so skip only when the fixture itself cannot be created; every other
+  // failure is a real error and must fail the test. Directory junctions need no
+  // privileges on Windows, so directory fixtures use one instead of a real symlink
+  // and keep running there; only file-symlink fixtures are skipped.
+  const symlinkFixture = async (
+    context: { skip(): void },
+    target: string,
+    path: string,
+    type?: "dir" | "file"
+  ) => {
+    try {
+      await symlink(target, path, process.platform === "win32" && type === "dir" ? "junction" : type);
+    } catch (error) {
+      if (process.platform === "win32" && (error as NodeJS.ErrnoException).code === "EPERM") {
+        // The skip must stay visible: the limitation is real, it just is not a
+        // code failure. Echo the original error so it is never silently lost.
+        process.stderr.write(
+          `WARNING skipping symlink boundary test: Windows denied symlink creation (EPERM). ` +
+          `Enable Developer Mode or run elevated for full coverage. Original error: ${error}\n`
+        );
+        context.skip();
+        return;
+      }
+      throw error;
+    }
+  };
+
   before(async () => {
     process.env.METACALL_TOKEN = "upload-test-token";
     process.env.METACALL_BASE_URL = "https://dashboard.metacall.io";
@@ -37,6 +70,7 @@ describe("Upload filesystem boundary", () => {
   });
 
   beforeEach(async () => {
+    originalCwd = process.cwd();
     temporary = await mkdtemp(join(tmpdir(), "mcp-upload-"));
     workspace = join(temporary, "workspace");
     outside = join(temporary, "workspace-other");
@@ -52,6 +86,8 @@ describe("Upload filesystem boundary", () => {
 
   afterEach(async () => {
     globalThis.fetch = originalFetch;
+    // Restore cwd first: Windows cannot delete the directory it is currently in.
+    process.chdir(originalCwd);
     await rm(temporary, { recursive: true, force: true });
   });
 
@@ -70,13 +106,17 @@ describe("Upload filesystem boundary", () => {
 
   it("rejects a relative workspace setting", async () => {
     await writeFile(join(workspace, "app.zip"), "PK");
-    process.env.METACALL_WORKSPACE_ROOT = relative(process.cwd(), workspace);
+    // chdir into the temp tree so the workspace path is relative on the same
+    // drive; path.relative across Windows drives yields an absolute path.
+    process.chdir(temporary);
+    process.env.METACALL_WORKSPACE_ROOT = "workspace";
     await denied({ zipPath: join(workspace, "app.zip") }, /workspace.*absolute|METACALL_WORKSPACE_ROOT.*absolute/i);
   });
 
   it("rejects relative upload paths", async () => {
     await writeFile(join(workspace, "app.zip"), "PK");
-    await denied({ zipPath: relative(process.cwd(), join(workspace, "app.zip")) }, /absolute/i);
+    process.chdir(temporary);
+    await denied({ zipPath: join("workspace", "app.zip") }, /absolute/i);
   });
 
   it("rejects projects outside the workspace", async () => {
@@ -91,27 +131,27 @@ describe("Upload filesystem boundary", () => {
     await denied({ zipPath: `${workspace}/../workspace-other/app.zip` }, /outside.*workspace/i);
   });
 
-  it("rejects a zip symlink to an external file", async () => {
+  it("rejects a zip symlink to an external file", async function () {
     await writeFile(join(outside, "app.zip"), "PK");
-    await symlink(join(outside, "app.zip"), join(workspace, "app.zip"));
+    await symlinkFixture(this, join(outside, "app.zip"), join(workspace, "app.zip"));
     await denied({ zipPath: join(workspace, "app.zip") }, /outside.*workspace/i);
   });
 
-  it("rejects a project symlink to an external directory", async () => {
+  it("rejects a project symlink to an external directory", async function () {
     await writeFile(join(outside, "index.js"), "exports.value = 1;");
-    await symlink(outside, join(workspace, "linked"));
+    await symlinkFixture(this, outside, join(workspace, "linked"), "dir");
     await denied({ projectPath: join(workspace, "linked") }, /outside.*workspace/i);
   });
 
-  it("checks discovered files behind directory symlinks", async () => {
+  it("checks discovered files behind directory symlinks", async function () {
     await writeFile(join(outside, "index.js"), "exports.value = 1;");
-    await symlink(outside, join(workspace, "linked"));
+    await symlinkFixture(this, outside, join(workspace, "linked"), "dir");
     await denied({ projectPath: workspace }, /outside.*workspace/i);
   });
 
-  it("checks discovered file symlinks", async () => {
+  it("checks discovered file symlinks", async function () {
     await writeFile(join(outside, "index.js"), "exports.value = 1;");
-    await symlink(join(outside, "index.js"), join(workspace, "index.js"));
+    await symlinkFixture(this, join(outside, "index.js"), join(workspace, "index.js"));
     await denied({ projectPath: workspace }, /outside.*workspace/i);
   });
 
@@ -130,10 +170,10 @@ describe("Upload filesystem boundary", () => {
     await denied({ zipPath: path }, /upload.*limit|upload.*exceed/i);
   });
 
-  it("keeps original archive names for contained symlinks and honors .gitignore", async () => {
+  it("keeps original archive names for contained symlinks and honors .gitignore", async function () {
     await mkdir(join(workspace, "src"));
     await writeFile(join(workspace, "src", "index.js"), "exports.value = 1;");
-    await symlink(join(workspace, "src", "index.js"), join(workspace, "alias.js"));
+    await symlinkFixture(this, join(workspace, "src", "index.js"), join(workspace, "alias.js"));
     await writeFile(join(workspace, ".gitignore"), "ignored.txt\n");
     await writeFile(join(workspace, "ignored.txt"), "ignored fixture");
     await writeFile(join(workspace, ".env"), "EXAMPLE=fixture\n");
