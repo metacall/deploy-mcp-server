@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -18,7 +19,7 @@ import { redactCredentials } from "./protocol/client.js";
 
 const server = new Server(
   {
-    name: "metacall-mcp-server",
+    name: "deploy-mcp-server",
     version: "1.0.0"
   },
   {

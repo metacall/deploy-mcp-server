@@ -67,7 +67,7 @@ describe("Unit MCP Server", function () {
 
   it("server identity", () => {
     deepStrictEqual(client.getServerVersion(), {
-      name: "metacall-mcp-server",
+      name: "deploy-mcp-server",
       version: "1.0.0"
     });
   });

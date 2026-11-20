@@ -26,7 +26,9 @@ The recording is also in the repo at [`demo/demo.mp4`](demo/demo.mp4).
 
 ## Install
 
-From the repository directory:
+The server is published on npm as [`@metacall/deploy-mcp-server`](https://www.npmjs.com/package/@metacall/deploy-mcp-server). MCP clients can start it with `npx`, so nothing needs to be installed first (see [MCP client configuration](#mcp-client-configuration)).
+
+To build from source instead, run from the repository directory:
 
 ```bash
 npm ci
@@ -50,8 +52,10 @@ Set these variables in the server process environment. The server does not load 
 With the environment configured, start the stdio server:
 
 ```bash
-node dist/index.js
+npx -y @metacall/deploy-mcp-server
 ```
+
+From a source checkout, run `node dist/index.js` instead.
 
 ## MCP client configuration
 
@@ -61,8 +65,8 @@ For clients using an `mcpServers` configuration:
 {
   "mcpServers": {
     "metacall": {
-      "command": "node",
-      "args": ["/absolute/path/to/deploy-mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@metacall/deploy-mcp-server"],
       "env": {
         "METACALL_TOKEN": "your_token_here",
         "METACALL_BASE_URL": "https://dashboard.metacall.io",
@@ -73,7 +77,7 @@ For clients using an `mcpServers` configuration:
 }
 ```
 
-On Windows, use absolute paths such as `C:/projects` or escape backslashes in JSON. For local FaaS, set the token to `local` and the base URL to `http://localhost:9100`.
+To run a source checkout, set `"command"` to `"node"` and `"args"` to `["/absolute/path/to/deploy-mcp-server/dist/index.js"]`. On Windows, use absolute paths such as `C:/projects` or escape backslashes in JSON. For local FaaS, set the token to `local` and the base URL to `http://localhost:9100`.
 
 ## MCP Inspector
 

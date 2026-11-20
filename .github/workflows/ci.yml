@@ -5,6 +5,8 @@ on:
     push:
         branches:
             - main
+        tags:
+            - 'v*.*.*'
     workflow_dispatch:
 
 concurrency:
@@ -41,3 +43,36 @@ jobs:
 
             - name: Run Tests
               run: npm run test
+
+    publish:
+        needs: ci
+        if: startsWith(github.ref, 'refs/tags/')
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            id-token: write
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup NodeJS
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  registry-url: https://registry.npmjs.org
+
+            - name: Installing Dependencies
+              run: npm ci
+
+            - name: Check Tag Matches Version
+              run: |
+                  VERSION="v$(node -p "require('./package.json').version")"
+                  if [ "$VERSION" != "$GITHUB_REF_NAME" ]; then
+                      echo "Tag $GITHUB_REF_NAME does not match package.json version $VERSION"
+                      exit 1
+                  fi
+
+            - name: Publish
+              run: |
+                  unset NODE_AUTH_TOKEN
+                  npm publish --provenance
