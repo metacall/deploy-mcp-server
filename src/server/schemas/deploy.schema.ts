@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ResourceType } from "@metacall/protocol";
+import { Plans, ResourceType } from "@metacall/protocol";
 
 export const DeploySchema = z.object({
   name: z.string(),
@@ -13,7 +13,9 @@ export const DeploySchema = z.object({
     )
     .default([]),
 
-  plan: z.string(),
+  // Protocol types this as Plans; an unchecked string reached the API unvalidated
+  // and left the accepted values out of the advertised input schema.
+  plan: z.nativeEnum(Plans),
 
   resourceType: z.nativeEnum(ResourceType),
 

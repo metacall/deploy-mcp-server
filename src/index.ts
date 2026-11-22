@@ -39,16 +39,21 @@ server.setRequestHandler(GetPromptRequestSchema, async request =>
   getPrompt(request.params.name, request.params.arguments)
 );
 
-// Discovery phase
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: tools.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: zodToJsonSchema(tool.schema) 
-    }))
-  };
-});
+// Discovery phase. Converted once: the schemas are static and the result is
+// returned verbatim on every tools/list.
+const toolList = tools.map((tool) => ({
+  name: tool.name,
+  description: tool.description,
+  // $refStrategy "none" keeps every argument self-contained. By default identical
+  // subschemas collapse into an internal $ref (upload's zipPath pointed at
+  // projectPath), which clients are not required to resolve and which discards the
+  // sibling description under JSON Schema draft-07.
+  inputSchema: zodToJsonSchema(tool.schema, { $refStrategy: "none" }),
+  // Every tool talks to a remote FaaS, so the world is open unless stated otherwise.
+  annotations: { openWorldHint: true, ...tool.annotations }
+}));
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: toolList }));
 
 // Execution phase
 server.setRequestHandler(CallToolRequestSchema, async (request) => {

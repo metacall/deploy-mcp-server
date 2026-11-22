@@ -12,7 +12,10 @@ export const branchListTool: MCPToolDefinition = {
   Use this tool when you need to determine which branch should be inspected, deployed, or used for repository-based deployments. \
   Requires the repository URL as input and returns all available branch names.",
   schema: BranchListSchema,
-
+  annotations: {
+    title: "List repository branches",
+    readOnlyHint: true
+  },
   execute: createToolHandler(
     BranchListSchema,
     async ({ url }) => {

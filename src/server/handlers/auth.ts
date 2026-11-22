@@ -13,7 +13,10 @@ export const validateAuthTool: MCPToolDefinition = {
   Returns a boolean indicating whether the token is valid.",
 
   schema: ValidateAuthSchema,
-
+  annotations: {
+    title: "Validate authentication token",
+    readOnlyHint: true
+  },
   execute: createToolHandler(
     ValidateAuthSchema,
 

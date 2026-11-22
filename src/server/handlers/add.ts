@@ -12,7 +12,12 @@ export const addTool: MCPToolDefinition = {
   Requires the repository URL and branch name.\
   Returns the repository identifier that will later be used for deployments.",
   schema: AddSchema,
-
+  annotations: {
+    title: "Register repository",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false
+  },
   execute: createToolHandler(
     AddSchema,
     async ({ url, branch, jsons = [] }) => {

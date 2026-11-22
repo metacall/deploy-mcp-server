@@ -15,7 +15,10 @@ export const logsTool: MCPToolDefinition = {
     "Retrieve logs from a MetaCall deployment container. The container usually matches the runtime language used in the deployment (e.g., python, node).Use this tool when debugging a deployment or checking runtime output.",
 
   schema: LogsSchema,
-
+  annotations: {
+    title: "Read deployment logs",
+    readOnlyHint: true
+  },
   execute: createToolHandler(
     LogsSchema,
     async ({ suffix, container }) => {

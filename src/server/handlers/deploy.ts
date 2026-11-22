@@ -20,7 +20,12 @@ Parameters:
 - version: deployment version (e.g. v1)
 `,
   schema: DeploySchema,
-
+  annotations: {
+    title: "Deploy package or repository",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false
+  },
   execute: createToolHandler(
     DeploySchema,
     async ({ name, env, plan, resourceType, release, version }) => {
@@ -28,7 +33,7 @@ Parameters:
       const deployment = await api.deploy(
         name,
         env ?? [],
-        plan as any,
+        plan,
         resourceType,
         release,
         version

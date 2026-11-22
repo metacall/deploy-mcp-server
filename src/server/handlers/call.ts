@@ -9,6 +9,11 @@ export const callTool: MCPToolDefinition = {
   description:
     "Invoke a synchronous function from a deployed MetaCall service. Arguments must be provided as an object where keys match the function parameter names (e.g., add(a,b) → {\"a\":1,\"b\":2}). If required arguments are missing, ask the user for them.",
   schema: CallSchema,
+  annotations: {
+    title: "Invoke function",
+    readOnlyHint: false,
+    idempotentHint: false
+  },
   execute: createToolHandler(
     CallSchema,
     async ({ suffix, function: fn, args }) => {

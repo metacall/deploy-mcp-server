@@ -12,7 +12,10 @@ export const deployEnabledTool: MCPToolDefinition = {
   Returns a boolean indicating whether deployments are permitted for the authenticated account.",
 
   schema: DeployEnabledSchema,
-
+  annotations: {
+    title: "Check deploy permission",
+    readOnlyHint: true
+  },
   execute: createToolHandler(
     DeployEnabledSchema,
     async () => {

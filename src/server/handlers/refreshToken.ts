@@ -8,7 +8,12 @@ export const refreshTokenTool: MCPToolDefinition = {
   name: "refresh",
   description: "Refreshes the MetaCall authentication token.",
   schema: RefreshTokenSchema,
-
+  annotations: {
+    title: "Refresh authentication token",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false
+  },
   execute: createToolHandler(
     RefreshTokenSchema,
     async () => {
