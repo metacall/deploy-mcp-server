@@ -561,6 +561,22 @@ describe("Unit Protocol Client", function () {
     ]);
   });
 
+  it("tools/call rejects an unknown plan before reaching the API", async () => {
+    // A conformant client may send any string, so the plan must be rejected by Zod
+    // with a field-level issue rather than being forwarded to the dashboard.
+    await rejects(
+      callTool("deploy", { name: "demo", plan: "Free", resourceType: "Package", release: "r", version: "v1" }),
+      (error: Error) => {
+        const [issue] = JSON.parse(error.message.slice(error.message.indexOf("["))) as
+          { code: string; path: (string | number)[] }[];
+        strictEqual(issue.code, "invalid_enum_value");
+        deepStrictEqual(issue.path, ["plan"]);
+        return true;
+      }
+    );
+    deepStrictEqual(requests, []);
+  });
+
   it("omitted arguments reach tools that take none", async () => {
     // params.arguments is optional in tools/call, so a conformant client may leave it
     // out entirely rather than sending an empty object.

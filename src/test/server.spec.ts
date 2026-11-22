@@ -146,13 +146,6 @@ describe("Unit MCP Server", function () {
     deepStrictEqual(plan.enum, ["Essential", "Standard", "Premium"]);
   });
 
-  it("tools/call rejects an unknown plan before reaching the API", async () => {
-    await rejects(client.callTool({
-      name: "deploy",
-      arguments: { name: "demo", plan: "Free", resourceType: "Package", release: "r", version: "v1" }
-    }), /invalid_enum_value|plan/i);
-  });
-
   it("tools/list upload required arguments", () => {
     const upload = tools.find((tool) => tool.name === "upload");
 
