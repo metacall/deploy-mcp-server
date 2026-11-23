@@ -22,6 +22,8 @@ export function validateLocalRepository(url: string, branch?: string): void {
   if (branch !== undefined && (
     branch === "HEAD" || branch === "@" || branch.startsWith("-") || branch.startsWith("#") ||
     branch.endsWith(".") || branch.includes("..") ||
+    // Control characters are exactly what this rejects.
+    // eslint-disable-next-line no-control-regex
     /[\s\x00-\x1f\x7f~^:?*[\]\\`$"';&|<>(){}]/u.test(branch) ||
     branch.split("/").some(part => !part || part.startsWith(".") || part.endsWith(".lock"))
   )) {

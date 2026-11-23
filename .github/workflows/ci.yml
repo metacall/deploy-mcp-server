@@ -35,6 +35,9 @@ jobs:
             - name: Installing Dependencies
               run: npm ci
 
+            - name: Lint
+              run: npm run --silent lint
+
             - name: Type Check
               run: npx tsc --noEmit
 

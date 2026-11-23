@@ -25,7 +25,7 @@ export const inspectByNameTool: MCPToolDefinition = {
                 found: true,
                 deployment
             };
-        } catch (error) {
+        } catch {
             return {
                 found: false,
                 deployment: null

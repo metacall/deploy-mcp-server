@@ -226,6 +226,8 @@ npm test
 
 Windows Developer Mode may be required for the symlink-based security tests.
 
+`npm run build` lints before compiling, as in `metacall/protocol`. `npm run lint` reports ESLint findings and `npm run fix` applies the fixable ones. Formatting is Prettier's, configured under `prettier` in `package.json`: `npm run format` writes it and `npm run format:check` reports it. The repo has not been formatted yet - that pass is deliberately left out of this configuration so it does not collide with open pull requests - so `format:check` currently reports differences and CI does not run it.
+
 ## License
 
 Apache License 2.0, see [LICENSE](LICENSE).
