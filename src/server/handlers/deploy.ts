@@ -1,5 +1,5 @@
 import { api } from "../../protocol/client.js";
-import { setActiveDeployment } from "../../context.js";
+import { requireDeployment, setActiveDeployment } from "../../context.js";
 import { createToolHandler } from "../toolFactory.js";
 import { DeploySchema } from "../schemas/deploy.schema.js";
 import type { MCPToolDefinition } from "../types.js";
@@ -35,7 +35,8 @@ Parameters:
       );
 
       const inspected = await waitFor(async () => {
-        const current = await api.inspectByName(deployment.suffix);
+        // Readiness changes under the poll, so force a fresh listing every attempt.
+        const current = await requireDeployment(deployment.suffix, true);
 
         if (current.status === "create") {
           throw new Error("Deployment not ready yet");

@@ -1,5 +1,4 @@
-import { api } from "../../protocol/client.js";
-import { setActiveDeployment } from "../../context.js";
+import { requireDeployment, setActiveDeployment } from "../../context.js";
 import { createToolHandler } from "../toolFactory.js";
 import { InspectByNameSchema } from "../schemas/inspectByName.schema.js";
 import type { MCPToolDefinition } from "../types.js";
@@ -18,8 +17,8 @@ export const inspectByNameTool: MCPToolDefinition = {
     InspectByNameSchema,
     async ({ suffix }) => {
         try {
-            // Protocol throws when the suffix is not found, so a result is always present.
-            const deployment = await api.inspectByName(suffix);
+            // The lookup throws when the suffix is not found, so a result is always present.
+            const deployment = await requireDeployment(suffix);
             setActiveDeployment(deployment);
             return {
                 found: true,
