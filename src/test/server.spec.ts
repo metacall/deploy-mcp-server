@@ -24,7 +24,8 @@ const expectedTools = [
   "listSubscriptionsDeploys",
   "call",
   "await",
-  "logs"
+  "logs",
+  "availableJobLogs"
 ];
 
 function promptText(result: Awaited<ReturnType<Client["getPrompt"]>>): string {
@@ -100,6 +101,16 @@ describe("Unit MCP Server", function () {
     // The "exactly one of projectPath, zipPath or zipBase64" refinement is a Zod effect
     // and does not survive the JSON Schema conversion, so clients only see "name" required.
     deepStrictEqual(upload?.inputSchema.required, ["name"]);
+  });
+
+  it("tools/list logs advertises both log streams", () => {
+    const logs = tools.find((tool) => tool.name === "logs");
+    const properties = logs?.inputSchema.properties as Record<string, { enum?: string[]; default?: string }>;
+
+    deepStrictEqual(properties.type.enum, ["job", "deploy"]);
+    strictEqual(properties.type.default, "deploy");
+    deepStrictEqual(logs?.inputSchema.required, ["suffix", "container"]);
+    match(logs?.description ?? "", /availableJobLogs/);
   });
 
   it("tools/list subscription counts describe entries rather than deployment usage", () => {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LogType } from "@metacall/protocol";
 
 export const LogsSchema = z.object({
   suffix: z
@@ -10,6 +11,13 @@ export const LogsSchema = z.object({
   container: z
     .string()
     .describe(
-      "Runtime container name whose logs should be retrieved. Examples: python, node, rust."
+      "Container name whose logs should be retrieved. For type \"job\", list the deployment's containers with availableJobLogs; for type \"deploy\" the container is usually the runtime language. Examples: python, node, rust."
+    ),
+
+  type: z
+    .nativeEnum(LogType)
+    .default(LogType.Deploy)
+    .describe(
+      "Which log stream to read: \"deploy\" for build and deployment output, \"job\" for output the running deployment produced. Defaults to \"deploy\"."
     )
 });

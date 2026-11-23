@@ -68,6 +68,10 @@ describe("Unit Invocation", () => {
         return new Response("log line");
       }
 
+      if (url === "https://dashboard.metacall.io/api/deploy/availablejoblogs") {
+        return Response.json(["node", "worker"]);
+      }
+
       if (url === "https://dashboard.metacall.io/api/deploy/delete") {
         return Response.json("deleted");
       }
@@ -180,6 +184,7 @@ describe("Unit Invocation", () => {
     deepStrictEqual(await execute("logs", { suffix: "test-suffix", container: "node" }), {
       deployment: "test-suffix",
       container: "node",
+      type: "deploy",
       version: "v3",
       logs: "log line"
     });
@@ -194,6 +199,39 @@ describe("Unit Invocation", () => {
         version: "v3"
       })
     });
+  });
+
+  it("logs reads the requested stream", async () => {
+    const result = await execute("logs", { suffix: "test-suffix", container: "node", type: "job" });
+
+    strictEqual(result.type, "job");
+    deepStrictEqual(requests[1], {
+      url: "https://dashboard.metacall.io/api/deploy/logs",
+      method: "POST",
+      body: JSON.stringify({
+        container: "node",
+        type: "job",
+        prefix: "test-prefix",
+        suffix: "test-suffix",
+        version: "v3"
+      })
+    });
+
+    await rejects(execute("logs", { suffix: "test-suffix", container: "node", type: "build" }),
+      /invalid_enum_value|type/i);
+  });
+
+  it("availableJobLogs lists containers without a listing lookup", async () => {
+    deepStrictEqual(await execute("availableJobLogs", { suffix: "test-suffix" }), {
+      deployment: "test-suffix",
+      count: 2,
+      containers: ["node", "worker"]
+    });
+    deepStrictEqual(requests, [{
+      url: "https://dashboard.metacall.io/api/deploy/availablejoblogs",
+      method: "POST",
+      body: JSON.stringify({ suffix: "test-suffix" })
+    }]);
   });
 
   it("invocation protocol error", async () => {

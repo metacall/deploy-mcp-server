@@ -650,6 +650,7 @@ describe("Unit Protocol Client", function () {
     const tools: [string, Record<string, unknown>][] = [
       ["await", { suffix: "test-suffix", function: "subtract" }],
       ["logs", { suffix: "test-suffix", container: "node" }],
+      ["availableJobLogs", { suffix: "test-suffix" }],
       ["refresh", {}]
     ];
 

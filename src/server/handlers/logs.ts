@@ -12,13 +12,14 @@ export const logsTool: MCPToolDefinition = {
   name: "logs",
 
   description:
-    "Retrieve logs from a MetaCall deployment container. The container usually matches the runtime language used in the deployment (e.g., python, node).Use this tool when debugging a deployment or checking runtime output.",
+    "Retrieve logs from a MetaCall deployment container. Use type \"deploy\" (the default) for build and deployment output, and type \"job\" for output the running deployment produced - a deployment that built fine but misbehaves needs the job logs. The container usually matches the runtime language used in the deployment (e.g., python, node); availableJobLogs lists the containers that have job logs.",
 
   schema: LogsSchema,
 
   execute: createToolHandler(
     LogsSchema,
-    async ({ suffix, container }) => {
+    // The schema defaults type to "deploy"; handler args are typed from the schema input.
+    async ({ suffix, container, type = LogType.Deploy }) => {
       if (local) {
         throw new Error("Local FaaS does not support logs");
       }
@@ -28,7 +29,7 @@ export const logsTool: MCPToolDefinition = {
       const version = deployment.version;
       const rawLogs = await api.logs(
         container,
-        LogType.Deploy,
+        type,
         prefix,
         suffix,
         version
@@ -40,6 +41,7 @@ export const logsTool: MCPToolDefinition = {
       return {
         deployment: suffix,
         container,
+        type,
         version,
         logs: bytes.subarray(0, end).toString(),
         ...(bytes.length > MAX_LOG_BYTES ? { truncated: true, originalBytes: bytes.length } : {})
