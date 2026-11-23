@@ -1,4 +1,4 @@
-import { api, registerSecret } from "../../protocol/client.js";
+import { api, registerSecret, unregisterSecret } from "../../protocol/client.js";
 import { setActiveDeployment } from "../../context.js";
 import { createToolHandler } from "../toolFactory.js";
 import { DeploySchema } from "../schemas/deploy.schema.js";
@@ -37,6 +37,13 @@ Parameters:
         release,
         version
       );
+
+      // A value that is also an identifier the client must keep using is withdrawn
+      // now the platform has named the deployment: redacting the suffix out of this
+      // result would leave the model unable to reach what it just created.
+      for (const identifier of [name, release, version, deployment.suffix, deployment.prefix, deployment.version]) {
+        if (identifier) unregisterSecret(identifier);
+      }
 
       const inspected = await waitFor(async () => {
         const current = await api.inspectByName(deployment.suffix);

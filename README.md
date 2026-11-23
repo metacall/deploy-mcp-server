@@ -224,6 +224,7 @@ Two limits are deliberate:
 
 - Only values that passed through this server in this session are known. Variables set from the dashboard, or by an earlier session, are invisible to it.
 - Values shorter than 8 characters are not registered: `prod` or `true` appear in ordinary output, and redacting them would shred unrelated log text.
+- Redaction is an exact substring replacement, so a long env value that is not a secret is removed from log text too. Identifiers the client must keep using - the deployment name, suffix, prefix and version - are withdrawn once the platform has named the deployment, so a result always remains usable.
 
 Redaction is a safety net for echoes, not a guarantee. Treat deployment logs as capable of carrying secrets the server never saw.
 

@@ -19,6 +19,7 @@ describe("Cloud authentication", function () {
   let requestStatus: number;
   let logs: string;
   let prefix: string;
+  let suffix: string;
   let refreshedCredential: string;
   let pendingRefresh: ((response: ServerResponse) => void) | undefined;
   const requests: { url: string; authorization?: string }[] = [];
@@ -53,10 +54,10 @@ describe("Cloud authentication", function () {
         }));
       } else if (url === "/api/inspect") {
         res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify([{ prefix, suffix: "demo", version: "v1", status: "ready", packages: {} }]));
+        res.end(JSON.stringify([{ prefix, suffix, version: "v1", status: "ready", packages: {} }]));
       } else if (url === "/api/deploy/create") {
         res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ prefix, suffix: "demo", version: "v1" }));
+        res.end(JSON.stringify({ prefix, suffix, version: "v1" }));
       } else if (url === "/api/deploy/logs") {
         res.end(logs);
       } else {
@@ -73,6 +74,7 @@ describe("Cloud authentication", function () {
     requestStatus = 200;
     logs = "log line";
     prefix = "p";
+    suffix = "demo";
     refreshedCredential = "token-b";
     pendingRefresh = undefined;
     await connect();
@@ -267,6 +269,21 @@ describe("Cloud authentication", function () {
     const text = (await call("logs", { suffix: "demo", container: "node" })).content as { text: string }[];
     ok(!text[0].text.includes(password));
     match(text[0].text, /startup: connecting to/);
+  });
+
+  it("an env value that is also the deployment suffix survives", async () => {
+    // APP_NAME set to the project name is ordinary; the suffix is what logs, call
+    // and deployDelete need next, so redacting it would strand the model.
+    suffix = "demo-application";
+    const result = await call("deploy", {
+      name: "demo-application", plan: "Essential", resourceType: "Package", release: "r1", version: "v1",
+      env: [{ name: "APP_NAME", value: suffix }]
+    });
+    match((result.content as { text: string }[])[0].text, /demo-application/);
+
+    logs = `startup: ${suffix} listening`;
+    const text = (await call("logs", { suffix, container: "node" })).content as { text: string }[];
+    match(text[0].text, /demo-application listening/);
   });
 
   it("short env values are left alone", async () => {
