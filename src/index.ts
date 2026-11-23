@@ -56,10 +56,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   const tool = tools.find((t) => t.name === name);
   if (!tool) {
+    // No such tool is a protocol failure rather than a tool result.
     throw new Error(`Unknown tool: ${redactCredentials(name)}`);
   }
 
-  const result = await tool.execute(args);
+  let result;
+  try {
+    result = await tool.execute(args);
+  } catch (error) {
+    // A tool that ran and failed is reported as a result with isError, not as a
+    // JSON-RPC error: clients surface protocol errors to the user without
+    // handing them back to the model, so an invalid argument, a missing active
+    // deployment or an unsupported local operation was invisible to the one
+    // participant that could correct it.
+    return {
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: redactCredentials(error instanceof Error ? error.message : String(error))
+        }
+      ]
+    };
+  }
 
   return {
     content: [

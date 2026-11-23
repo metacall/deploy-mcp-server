@@ -27,6 +27,12 @@ const expectedTools = [
   "logs"
 ];
 
+function failureText(result: Awaited<ReturnType<Client["callTool"]>>): string {
+  const [content] = result.content as { type: string; text: string }[];
+  ok(content?.type === "text", "a tool failure must carry a text message");
+  return content.text;
+}
+
 function promptText(result: Awaited<ReturnType<Client["getPrompt"]>>): string {
   ok(result.messages.length > 0, "prompt must contain guidance");
   ok(!JSON.stringify(result).includes("yeet"), "prompt must not expose credentials");
@@ -205,9 +211,26 @@ describe("Unit MCP Server", function () {
   it("invocation without context", async () => {
     for (const name of ["call", "await"]) {
       deepStrictEqual(tools.find(tool => tool.name === name)?.inputSchema.required, ["function"]);
-      await rejects(client.callTool({ name, arguments: { function: "subtract" } }),
-        /No active deployment.*suffix.*deploy.*inspect/i);
+      const result = await client.callTool({ name, arguments: { function: "subtract" } });
+
+      // The failure has to reach the model to be actionable, so it arrives as a
+      // result rather than as a JSON-RPC error the client keeps to itself.
+      strictEqual(result.isError, true, name);
+      match(failureText(result), /No active deployment.*suffix.*deploy.*inspect/i);
     }
+  });
+
+  it("a rejected argument is reported to the model, not as a protocol error", async () => {
+    // Zod names the offending field; as a JSON-RPC error the model saw none of it.
+    const result = await client.callTool({ name: "logs", arguments: {} });
+
+    strictEqual(result.isError, true);
+    match(failureText(result), /suffix/);
+    match(failureText(result), /container/);
+  });
+
+  it("an unknown tool stays a protocol error", async () => {
+    await rejects(client.callTool({ name: "nope", arguments: {} }), /unknown tool/i);
   });
 });
 
