@@ -13,7 +13,12 @@ export const deployDeleteTool: MCPToolDefinition = {
   Requires the deployment suffix and optionally the version. \
   This operation permanently removes the deployment and its resources from the MetaCall platform.",
   schema: DeployDeleteSchema,
-
+  annotations: {
+    title: "Delete deployment",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false
+  },
   execute: createToolHandler(
     DeployDeleteSchema,
     // The schema defaults version to "v1"; handler args are typed from the schema input.

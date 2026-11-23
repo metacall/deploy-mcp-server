@@ -95,7 +95,9 @@ In PowerShell, enter the command on one line and replace `/tmp` with an existing
 
 ## Tools
 
-`?` marks optional arguments; tools with no arguments accept `{}`.
+`?` marks optional arguments; tools with no arguments accept `{}` or no `arguments` at all.
+
+Every tool carries MCP annotations so clients can decide what to confirm: `validate`, `deployEnabled`, `inspect`, `inspectByName`, `listSubscriptions`, `listSubscriptionsDeploys`, `branchList`, `fileList` and `logs` are read-only, `deployDelete` is destructive, and `call` and `await` run arbitrary deployed code so they leave the client's default destructive hint in place.
 
 | Tool | Arguments | Purpose |
 | --- | --- | --- |
@@ -116,9 +118,11 @@ In PowerShell, enter the command on one line and replace `/tmp` with an existing
 | `await` | `function`, `suffix?`, `args?` | Invoke an async function on cloud. |
 | `logs` | `suffix`, `container` | Read cloud runtime logs. |
 
-For `deploy`, `resourceType` is `Package` or `Repository`. Use the `packageId` returned by `upload` or the `repositoryId` returned by `add` as `name`. `release` is a deployment release identifier, not a Git branch. Cloud deployments require an available subscription plan; check `inspect` and `listSubscriptions` first. `env` defaults to `[]` and contains `{ "name": "KEY", "value": "value" }` entries. `deployDelete.version` defaults to `v1`.
+For `deploy`, `resourceType` is `Package` or `Repository` and `plan` is `Essential`, `Standard` or `Premium`. Use the `packageId` returned by `upload` or the `repositoryId` returned by `add` as `name`. `release` is a deployment release identifier, not a Git branch. Cloud deployments require an available subscription plan; check `inspect` and `listSubscriptions` first. `env` defaults to `[]` and contains `{ "name": "KEY", "value": "value" }` entries. `deployDelete.version` defaults to `v1`.
 
 > **Temporary limitation:** `@metacall/protocol` 0.1.35 sends `listSubscriptionsDeploys` to the subscription list endpoint, so it currently returns subscription plan entries rather than deployment associations. This is fixed upstream in [metacall/protocol#61](https://github.com/metacall/protocol/pull/61) but not yet released.
+
+`inspectByName` reports `found: false` only when the account has no deployment with that suffix; request, authentication and transport failures are raised as errors instead.
 
 `call` and `await` take a named-argument object in `args`. Omitting `suffix` uses the active deployment, selected by a successful `deploy`, `inspectByName` or invocation with an explicit suffix. Local calls order arguments by the inspected signature when complete and unambiguous; otherwise input order is preserved. Inspection may include MetaCall runtime functions. Cloud log responses are limited to 64 KiB and redact credentials known to the server.
 

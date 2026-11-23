@@ -9,7 +9,10 @@ export const listSubscriptionsDeploysTool: MCPToolDefinition = {
   description:
   "Retrieves deployments associated with the account's billing subscriptions. Note: @metacall/protocol 0.1.35 queries the subscription list endpoint, so this currently returns subscription plan entries rather than deployment associations (fixed upstream in metacall/protocol#61, not yet released).",
   schema: ListSubscriptionsDeploysSchema,
-
+  annotations: {
+    title: "List subscription deployments",
+    readOnlyHint: true
+  },
   execute: createToolHandler(
     ListSubscriptionsDeploysSchema,
     async () => {

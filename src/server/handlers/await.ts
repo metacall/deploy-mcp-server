@@ -11,7 +11,11 @@ export const awaitTool: MCPToolDefinition = {
     "Invoke an asynchronous function from a deployed MetaCall service. Use this tool when the function returns a Promise, coroutine, or async result. Arguments must be provided as an object where keys match the function parameter names (e.g., async_add(a,b) → {\"a\":1,\"b\":2}). If required arguments are missing, ask the user for them before invoking.",
 
   schema: AwaitSchema,
-
+  annotations: {
+    title: "Invoke asynchronous function",
+    readOnlyHint: false,
+    idempotentHint: false
+  },
   execute: createToolHandler(
     AwaitSchema,
     async ({ suffix, function: fn, args }) => {

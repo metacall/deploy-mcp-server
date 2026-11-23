@@ -18,7 +18,12 @@ export const uploadTool: MCPToolDefinition = {
   name: "upload",
   description:"Upload a package to MetaCall Cloud. Provide exactly one of:1) projectPath (absolute path to a local project directory, preferred: files, runners and MetaCall JSONs are detected and zipped automatically, so jsons and runners must be omitted)2) zipBase64 (if a zip file is already loaded)3) zipPath (absolute path to a zip file accessible by the MCP server,IMPORTANT PATH RULES:1)The path must be an ABSOLUTE path.2)The file or directory must exist and be accessible to the MCP server. 3)On Windows, escape backslashes or use forward slashes. Examples: Windows: C:\\Users\\username\\Desktop\\function.zip or C:/Users/username/Desktop/function.zip ,Linux / macOS: /home/user/function.zip",
   schema: UploadSchema,
-
+  annotations: {
+    title: "Upload package",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false
+  },
   execute: createToolHandler(
     UploadSchema,
     async ({ name, projectPath, zipPath, zipBase64, jsons = [], runners = [] }) => {

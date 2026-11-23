@@ -11,7 +11,10 @@ export const inspectTool: MCPToolDefinition = {
   Use this tool when you need to discover existing deployed services, identify deployment suffixes, or inspect available deployments before invoking functions, retrieving logs, or deleting deployments. \
   Returns a list of deployments associated with the authenticated account.",
   schema: InspectSchema,
-
+  annotations: {
+    title: "List deployments",
+    readOnlyHint: true
+  },
   execute: createToolHandler(
     InspectSchema,
     async () => {

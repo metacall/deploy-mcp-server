@@ -94,6 +94,58 @@ describe("Unit MCP Server", function () {
     }
   });
 
+  it("tools/list input schemas are self-contained", () => {
+    for (const tool of tools) {
+      // An internal $ref is not resolvable by every client, and draft-07 ignores
+      // keywords beside it, which silently dropped the description of any argument
+      // sharing a subschema with an earlier one.
+      doesNotMatch(JSON.stringify(tool.inputSchema), /"\$ref"/, tool.name);
+    }
+
+    const upload = tools.find(tool => tool.name === "upload")?.inputSchema.properties as
+      Record<string, { type?: string; description?: string }>;
+    for (const name of ["projectPath", "zipPath"]) {
+      strictEqual(upload[name].type, "string", name);
+      match(upload[name].description ?? "", /METACALL_WORKSPACE_ROOT/, name);
+    }
+    match(upload.zipPath.description ?? "", /\.zip/);
+  });
+
+  it("tools/list annotates behaviour for every tool", () => {
+    const annotations = new Map(tools.map(tool => [tool.name, tool.annotations ?? {}]));
+
+    for (const [name, annotation] of annotations) {
+      ok(annotation.title, `${name} must carry a display title`);
+      strictEqual(annotation.openWorldHint, true, name);
+      strictEqual(typeof annotation.readOnlyHint, "boolean", name);
+    }
+
+    for (const name of ["validate", "deployEnabled", "inspect", "inspectByName",
+      "listSubscriptions", "listSubscriptionsDeploys", "branchList", "fileList", "logs"]) {
+      strictEqual(annotations.get(name)?.readOnlyHint, true, name);
+    }
+    for (const name of ["refresh", "upload", "deploy", "add", "deployDelete", "call", "await"]) {
+      strictEqual(annotations.get(name)?.readOnlyHint, false, name);
+    }
+
+    // Deleting a deployment is irreversible; nothing else here destroys state, and
+    // invocations run arbitrary user code so they leave the client's default in place.
+    strictEqual(annotations.get("deployDelete")?.destructiveHint, true);
+    for (const name of ["refresh", "upload", "deploy", "add"]) {
+      strictEqual(annotations.get(name)?.destructiveHint, false, name);
+    }
+    for (const name of ["call", "await"]) {
+      strictEqual(annotations.get(name)?.destructiveHint, undefined, name);
+    }
+  });
+
+  it("tools/list deploy advertises the accepted plans", () => {
+    const plan = (tools.find(tool => tool.name === "deploy")?.inputSchema.properties as
+      Record<string, { enum?: string[] }>).plan;
+
+    deepStrictEqual(plan.enum, ["Essential", "Standard", "Premium"]);
+  });
+
   it("tools/list upload required arguments", () => {
     const upload = tools.find((tool) => tool.name === "upload");
 

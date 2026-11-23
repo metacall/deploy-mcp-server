@@ -12,7 +12,10 @@ export const fileListTool: MCPToolDefinition = {
   Use this tool when you need to inspect the files of a repository branch, verify the presence of certain files, or explore the repository structure before deploying or analyzing code. \
   Requires the repository URL and branch name, and returns the list of file paths found in that branch.",
   schema: FileListSchema,
-
+  annotations: {
+    title: "List repository files",
+    readOnlyHint: true
+  },
   execute: createToolHandler(
     FileListSchema,
     async ({ url, branch }) => {

@@ -11,7 +11,10 @@ export function createToolHandler<T>(
   return async (rawArgs: unknown) => {
     let args: T;
     try {
-      args = schema.parse(rawArgs);
+      // params.arguments is optional in tools/call, and clients legitimately omit it
+      // for tools that take none. Parsing undefined would fail every empty schema and
+      // reduce real validation errors to one root-level "expected object".
+      args = schema.parse(rawArgs ?? {});
     } catch (error) {
       // Keep the SDK/Zod error contract while removing echoed credentials.
       if (error instanceof Error) {

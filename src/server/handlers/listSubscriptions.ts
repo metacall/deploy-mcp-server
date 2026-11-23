@@ -11,7 +11,10 @@ export const listSubscriptionsTool: MCPToolDefinition = {
   "Lists subscription entries per plan in the MetaCall account. The usageCount field counts subscription entries, not deployment usage or occupancy.",
 
   schema: ListSubscriptionsSchema,
-
+  annotations: {
+    title: "List subscription plans",
+    readOnlyHint: true
+  },
   execute: createToolHandler(
     ListSubscriptionsSchema,
 

@@ -561,6 +561,52 @@ describe("Unit Protocol Client", function () {
     ]);
   });
 
+  it("tools/call rejects an unknown plan before reaching the API", async () => {
+    // A conformant client may send any string, so the plan must be rejected by Zod
+    // with a field-level issue rather than being forwarded to the dashboard.
+    await rejects(
+      callTool("deploy", { name: "demo", plan: "Free", resourceType: "Package", release: "r", version: "v1" }),
+      (error: Error) => {
+        const [issue] = JSON.parse(error.message.slice(error.message.indexOf("["))) as
+          { code: string; path: (string | number)[] }[];
+        strictEqual(issue.code, "invalid_enum_value");
+        deepStrictEqual(issue.path, ["plan"]);
+        return true;
+      }
+    );
+    deepStrictEqual(requests, []);
+  });
+
+  it("omitted arguments reach tools that take none", async () => {
+    // params.arguments is optional in tools/call, so a conformant client may leave it
+    // out entirely rather than sending an empty object.
+    const result = await client.callTool({ name: "inspect" });
+    const [content] = result.content as { text: string }[];
+
+    deepStrictEqual(JSON.parse(content.text), { count: 2, deployments: [deployment, otherDeployment] });
+    deepStrictEqual(requests, [{ url: "/api/inspect", body: "" }]);
+  });
+
+  it("inspectByName separates a missing suffix from a failed lookup", async () => {
+    deepStrictEqual(await callTool("inspectByName", { suffix: "does-not-exist" }), {
+      found: false,
+      deployment: null
+    });
+
+    // A failed lookup must not be reported as absence: the model would conclude a
+    // live deployment was gone and offer to redeploy over it.
+    inspectStatus = 503;
+    await rejects(callTool("inspectByName", { suffix: "test-suffix" }), (error: Error) => {
+      match(error.message, /ProtocolError/);
+      match(error.message, /503/);
+      ok(!error.message.includes(secret));
+      return true;
+    });
+
+    // The failure left no active deployment behind either.
+    await rejects(callTool("call", { function: "subtract" }), /no active deployment/i);
+  });
+
   it("inspectByName context", async () => {
     const inspected = await callTool("inspectByName", { suffix: "test-suffix" });
     strictEqual(inspected.found, true);
