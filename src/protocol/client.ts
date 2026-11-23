@@ -64,12 +64,34 @@ export function refreshAuthentication(): Promise<void> {
   return refreshing;
 }
 
+// Values shorter than this appear in ordinary output ("1", "true", "prod");
+// redacting them would shred unrelated log text.
+const MIN_SECRET_LENGTH = 8;
+
+// Secrets this server hands to the platform itself, such as deploy env values.
+// The deployment can print them back, so they are ours to redact from then on.
+// Held apart from credentials because these can be withdrawn and a credential
+// never is.
+const secrets = new Set<string>();
+
+export function registerSecret(value: string): void {
+  if (value.length >= MIN_SECRET_LENGTH) secrets.add(value);
+}
+
+// An env value that is also an identifier the client must keep using - APP_NAME
+// set to the project name, which is the deployment suffix - is not ours to
+// strike. Redacting it would erase the suffix from the result and leave the
+// model unable to name the deployment it just created.
+export function unregisterSecret(value: string): void {
+  secrets.delete(value);
+}
+
 // Exact credentials from this process only; do not guess at secrets in user data.
 // Retain retired values in memory so logs/errors cannot echo an earlier credential.
 export function redactCredentials(text: string): string {
-  for (const credential of credentials) {
-    if (local && credential === "local") continue;
-    text = text.split(credential).join("[REDACTED]");
+  for (const value of [...credentials, ...secrets]) {
+    if (local && value === "local") continue;
+    text = text.split(value).join("[REDACTED]");
   }
   return text;
 }
