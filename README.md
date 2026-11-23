@@ -216,6 +216,17 @@ docker stop mcp-faas-e2e
 
 `METACALL_TOKEN` seeds cloud authentication at startup. Before API requests, the server proactively refreshes a still-valid token nearing expiry. The renewed token stays in memory and serves subsequent tools and API-backed resource reads. It is never returned to the MCP client, written to disk or written back to `process.env.METACALL_TOKEN` or client configuration. Restarting uses the original configured token again. Recovery from a fully expired startup token is not guaranteed by upstream refresh semantics.
 
+## Secret redaction
+
+The server redacts exact secrets it knows from this session: `METACALL_TOKEN`, tokens it refreshed, and the `env` values passed to `deploy`. Env values are registered before they reach the platform, so a deployment that prints one back - a startup banner, a connection string in a stack trace - has it removed from `logs`, tool results and error messages.
+
+Two limits are deliberate:
+
+- Only values that passed through this server in this session are known. Variables set from the dashboard, or by an earlier session, are invisible to it.
+- Values shorter than 8 characters are not registered: `prod` or `true` appear in ordinary output, and redacting them would shred unrelated log text.
+
+Redaction is a safety net for echoes, not a guarantee. Treat deployment logs as capable of carrying secrets the server never saw.
+
 ## Development
 
 ```bash

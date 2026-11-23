@@ -1,4 +1,4 @@
-import { api } from "../../protocol/client.js";
+import { api, registerSecret } from "../../protocol/client.js";
 import { setActiveDeployment } from "../../context.js";
 import { createToolHandler } from "../toolFactory.js";
 import { DeploySchema } from "../schemas/deploy.schema.js";
@@ -25,6 +25,10 @@ Parameters:
     DeploySchema,
     async ({ name, env, plan, resourceType, release, version }) => {
       
+      // Redact these from logs and errors from here on: the deployment can print
+      // them back, and nothing else in this process knows them.
+      for (const { value } of env ?? []) registerSecret(value);
+
       const deployment = await api.deploy(
         name,
         env ?? [],

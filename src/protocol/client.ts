@@ -64,6 +64,16 @@ export function refreshAuthentication(): Promise<void> {
   return refreshing;
 }
 
+// Values shorter than this appear in ordinary output ("1", "true", "prod");
+// redacting them would shred unrelated log text.
+const MIN_SECRET_LENGTH = 8;
+
+// Secrets this server hands to the platform itself, such as deploy env values.
+// The deployment can print them back, so they are ours to redact from then on.
+export function registerSecret(value: string): void {
+  if (value.length >= MIN_SECRET_LENGTH) credentials.add(value);
+}
+
 // Exact credentials from this process only; do not guess at secrets in user data.
 // Retain retired values in memory so logs/errors cannot echo an earlier credential.
 export function redactCredentials(text: string): string {

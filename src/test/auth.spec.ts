@@ -53,7 +53,10 @@ describe("Cloud authentication", function () {
         }));
       } else if (url === "/api/inspect") {
         res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify([{ prefix, suffix: "demo", version: "v1", packages: {} }]));
+        res.end(JSON.stringify([{ prefix, suffix: "demo", version: "v1", status: "ready", packages: {} }]));
+      } else if (url === "/api/deploy/create") {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ prefix, suffix: "demo", version: "v1" }));
       } else if (url === "/api/deploy/logs") {
         res.end(logs);
       } else {
@@ -249,6 +252,33 @@ describe("Cloud authentication", function () {
     ok(!/token-a|token-b/.test(text));
     match(text, /before/);
     match(text, /after/);
+  });
+
+  it("deploy env values are redacted once handed to the platform", async () => {
+    const password = "pg://app:ffcb13d2ae1b4f0e@db.internal/app";
+    const deploy = (env: { name: string; value: string }[]) => call("deploy", {
+      name: "demo", plan: "Essential", resourceType: "Package", release: "r1", version: "v1", env
+    });
+
+    const result = await deploy([{ name: "DATABASE_URL", value: password }]);
+    ok(!JSON.stringify(result).includes(password), "the deploy result must not echo an env value");
+
+    logs = `startup: connecting to ${password}`;
+    const text = (await call("logs", { suffix: "demo", container: "node" })).content as { text: string }[];
+    ok(!text[0].text.includes(password));
+    match(text[0].text, /startup: connecting to/);
+  });
+
+  it("short env values are left alone", async () => {
+    await call("deploy", {
+      name: "demo", plan: "Essential", resourceType: "Package", release: "r1", version: "v1",
+      // Ordinary configuration, not a secret: redacting it would shred log text.
+      env: [{ name: "NODE_ENV", value: "prod" }]
+    });
+
+    logs = "listening in prod";
+    const text = (await call("logs", { suffix: "demo", container: "node" })).content as { text: string }[];
+    match(text[0].text, /listening in prod/);
   });
 
   it("logs bound returned text", async () => {
