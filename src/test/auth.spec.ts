@@ -23,8 +23,13 @@ describe("Cloud authentication", function () {
   let pendingRefresh: ((response: ServerResponse) => void) | undefined;
   const requests: { url: string; authorization?: string }[] = [];
 
-  const call = (name: string, args: Record<string, unknown> = {}) =>
-    client.callTool({ name, arguments: args });
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const result = await client.callTool({ name, arguments: args });
+    // A failed tool answers with isError rather than a JSON-RPC error, so raise
+    // here and let the assertions below keep reading as failures.
+    if (result.isError) throw new Error((result.content as { text: string }[])[0].text);
+    return result;
+  };
 
   const connect = async (token = "token-a", local = false) => {
     client = new Client({ name: "cloud-auth-test", version: "1.0.0" });

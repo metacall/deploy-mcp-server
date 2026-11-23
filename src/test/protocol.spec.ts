@@ -112,6 +112,9 @@ describe("Unit Protocol Client", function () {
   ): Promise<Record<string, unknown>> => {
     const result = await client.callTool({ name, arguments: args });
     const [content] = result.content as { text: string }[];
+    // A failed tool answers with isError rather than a JSON-RPC error, so raise
+    // here and let the assertions below keep reading as failures.
+    if (result.isError) throw new Error(content.text);
     return JSON.parse(content.text) as Record<string, unknown>;
   };
 
