@@ -541,6 +541,7 @@ describe("Unit Protocol Client", function () {
     });
 
     deepStrictEqual(result, {
+      status: "ready",
       message: "Deployment is ready",
       deployment: { prefix: "test-prefix", suffix: "test-suffix", version: "v1" }
     });
