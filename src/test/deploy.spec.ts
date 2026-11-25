@@ -17,6 +17,8 @@ describe("Unit Deploy", () => {
   let inspectHttp: number[] = [];
   let listed = true;
   let tool: MCPToolDefinition;
+  let listDeployments: () => Promise<unknown>;
+  let invalidateDeployments: () => void;
 
   const execute = (args: Record<string, unknown> = {}) => tool.execute({
     name: "package-id",
@@ -32,6 +34,7 @@ describe("Unit Deploy", () => {
     process.env.METACALL_BASE_URL = "https://dashboard.metacall.io";
     const { tools } = await import("../server/handlers/index.js");
     tool = tools.find(tool => tool.name === "deploy")!;
+    ({ listDeployments, invalidateDeployments } = await import("../context.js"));
   });
 
   beforeEach(() => {
@@ -39,6 +42,8 @@ describe("Unit Deploy", () => {
     statuses = [];
     inspectHttp = [];
     listed = true;
+    // A held listing must not leak from an earlier deploy or test.
+    invalidateDeployments();
     globalThis.setTimeout = ((callback: () => void) =>
       originalSetTimeout(callback, 0)) as typeof setTimeout;
     globalThis.fetch = async (input, init) => {
@@ -96,6 +101,24 @@ describe("Unit Deploy", () => {
       "https://dashboard.metacall.io/api/deploy/create",
       "https://dashboard.metacall.io/api/inspect",
       "https://dashboard.metacall.io/api/inspect",
+      "https://dashboard.metacall.io/api/inspect"
+    ]);
+  });
+
+  it("readiness polling ignores a held listing", async () => {
+    statuses = ["create"];
+    // A lookup from an earlier tool call, holding the deployment as building.
+    await listDeployments();
+    statuses = ["ready"];
+
+    deepStrictEqual(await execute(), {
+      status: "ready",
+      message: "Deployment is ready",
+      deployment: created
+    });
+    deepStrictEqual(requests, [
+      "https://dashboard.metacall.io/api/inspect",
+      "https://dashboard.metacall.io/api/deploy/create",
       "https://dashboard.metacall.io/api/inspect"
     ]);
   });

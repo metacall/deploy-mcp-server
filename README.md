@@ -222,6 +222,10 @@ docker stop mcp-faas-e2e
 
 `METACALL_TOKEN` seeds cloud authentication at startup. Before API requests, the server proactively refreshes a still-valid token nearing expiry. The renewed token stays in memory and serves subsequent tools and API-backed resource reads. It is never returned to the MCP client, written to disk or written back to `process.env.METACALL_TOKEN` or client configuration. Restarting uses the original configured token again. Recovery from a fully expired startup token is not guaranteed by upstream refresh semantics.
 
+## Deployment lookups
+
+The API has no lookup-by-suffix endpoint: `@metacall/protocol` resolves a suffix by downloading the full deployment listing. The server fetches that listing once per burst instead of once per lookup. Concurrent lookups share a single request, and a lookup reuses a listing fetched in the last five seconds, so a `call`, `logs` or `deployDelete` that follows an `inspectByName` costs no extra request. A completed delete drops the held listing. `deploy` readiness polling, the `inspect` tool and the `metacall://deployments` resources always read fresh.
+
 ## Development
 
 ```bash

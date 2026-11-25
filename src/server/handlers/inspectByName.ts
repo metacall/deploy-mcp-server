@@ -1,5 +1,4 @@
-import { api } from "../../protocol/client.js";
-import { setActiveDeployment } from "../../context.js";
+import { findDeployment, setActiveDeployment } from "../../context.js";
 import { createToolHandler } from "../toolFactory.js";
 import { InspectByNameSchema } from "../schemas/inspectByName.schema.js";
 import type { MCPToolDefinition } from "../types.js";
@@ -21,12 +20,11 @@ export const inspectByNameTool: MCPToolDefinition = {
   execute: createToolHandler(
     InspectByNameSchema,
     async ({ suffix }) => {
-      // api.inspectByName is api.inspect plus a lookup, and it reports a missing
-      // suffix with the same thrown Error as a failed request. Matching here keeps
-      // transport, authentication and server failures distinguishable from absence:
-      // reporting those as found: false would have the model conclude a live
-      // deployment was gone.
-      const deployment = (await api.inspect()).find(current => current.suffix === suffix);
+      // findDeployment returns undefined for a missing suffix. Every other
+      // failure it propagates still throws, so transport, authentication and
+      // server failures stay distinguishable from absence: reporting them as
+      // found: false would have the model conclude a live deployment was gone.
+      const deployment = await findDeployment(suffix);
 
       if (!deployment) {
         return {

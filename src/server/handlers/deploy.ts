@@ -1,5 +1,5 @@
 import { api } from "../../protocol/client.js";
-import { setActiveDeployment } from "../../context.js";
+import { findDeployment, setActiveDeployment } from "../../context.js";
 import { createToolHandler } from "../toolFactory.js";
 import { DefaultWaitSeconds, DeploySchema } from "../schemas/deploy.schema.js";
 import type { MCPToolDefinition } from "../types.js";
@@ -58,13 +58,11 @@ status "create". That is not a failure: poll inspectByName until it reports
       // Named so waitFor's failure message carries a label rather than this
       // function's source text.
       async function pollReadiness(): Promise<Deployment> {
-        // api.inspectByName is api.inspect plus a lookup, and it reports an
-        // unlisted suffix with the same thrown Error as a failed request. The
-        // list is fetched here so a deployment the dashboard has not published
-        // yet counts as building rather than as a lookup failure.
-        const current = (await api.inspect()).find(
-          ({ suffix }) => suffix === deployment.suffix
-        );
+        // findDeployment with force: readiness changes under the poll, so it
+        // never reads a held listing. The listing is fetched here so a
+        // deployment the dashboard has not published yet counts as building
+        // rather than as a lookup failure.
+        const current = await findDeployment(deployment.suffix, true);
 
         if (!current || current.status === "create") {
           building = true;

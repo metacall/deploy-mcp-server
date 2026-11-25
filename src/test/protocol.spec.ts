@@ -497,19 +497,22 @@ describe("Unit Protocol Client", function () {
     ]);
   });
 
-  it("local argument fallback", async () => {
-    const handle = deployment.packages.node[0];
-    const fn = handle.scope.funcs[0];
-    const cases: [typeof fn[], Record<string, number>, string, number | null][] = [
-      [[fn], { extra: 99, b: 3, a: 10 }, '{"a":10,"b":3,"extra":99}', 7],
-      [[], { b: 3, a: 10 }, '{"b":3,"a":10}', -7],
-      [[fn, fn], { b: 3, a: 10 }, '{"b":3,"a":10}', -7],
-      [[{ ...fn, signature: { ...fn.signature, args: [fn.signature.args[0], fn.signature.args[0]] } }],
-        { extra: 99, a: 10 }, '{"extra":99,"a":10}', 89],
-      [[fn], { b: 3 }, '{"b":3}', null]
-    ];
+  const handle = deployment.packages.node[0];
+  const fn = handle.scope.funcs[0];
+  const fallbacks: [string, typeof fn[], Record<string, number>, string, number | null][] = [
+    ["complete signature", [fn], { extra: 99, b: 3, a: 10 }, '{"a":10,"b":3,"extra":99}', 7],
+    ["unknown function", [], { b: 3, a: 10 }, '{"b":3,"a":10}', -7],
+    ["ambiguous signature", [fn, fn], { b: 3, a: 10 }, '{"b":3,"a":10}', -7],
+    ["repeated parameter name",
+      [{ ...fn, signature: { ...fn.signature, args: [fn.signature.args[0], fn.signature.args[0]] } }],
+      { extra: 99, a: 10 }, '{"extra":99,"a":10}', 89],
+    ["missing argument", [fn], { b: 3 }, '{"b":3}', null]
+  ];
 
-    for (const [funcs, args, body, expected] of cases) {
+  // One case per test: a suffix lookup holds its listing for the rest of a
+  // session, and each case needs the signatures it serves itself.
+  for (const [name, funcs, args, body, expected] of fallbacks) {
+    it(`local argument fallback: ${name}`, async () => {
       inspections = [{
         ...deployment,
         packages: { node: [{ ...handle, scope: { ...handle.scope, funcs } }] }
@@ -518,8 +521,8 @@ describe("Unit Protocol Client", function () {
 
       strictEqual(result.result, expected);
       strictEqual(requests.at(-1)?.body, body);
-    }
-  });
+    });
+  }
 
   it("missing context", async () => {
     await rejects(callTool("call", { function: "subtract", args: { a: 7, b: 2 } }), (error: Error) => {
@@ -589,11 +592,6 @@ describe("Unit Protocol Client", function () {
   });
 
   it("inspectByName separates a missing suffix from a failed lookup", async () => {
-    deepStrictEqual(await callTool("inspectByName", { suffix: "does-not-exist" }), {
-      found: false,
-      deployment: null
-    });
-
     // A failed lookup must not be reported as absence: the model would conclude a
     // live deployment was gone and offer to redeploy over it.
     inspectStatus = 503;
@@ -606,6 +604,14 @@ describe("Unit Protocol Client", function () {
 
     // The failure left no active deployment behind either.
     await rejects(callTool("call", { function: "subtract" }), /no active deployment/i);
+
+    // The failed request stored nothing, so the next lookup on a healthy
+    // listing reports absence rather than replaying the failure.
+    inspectStatus = 200;
+    deepStrictEqual(await callTool("inspectByName", { suffix: "does-not-exist" }), {
+      found: false,
+      deployment: null
+    });
   });
 
   it("inspectByName context", async () => {
@@ -630,8 +636,8 @@ describe("Unit Protocol Client", function () {
     strictEqual(result.deployment, "other-suffix");
     strictEqual(result.version, "v7");
     strictEqual(result.result, 10);
+    // The listing fetched for test-suffix answers other-suffix too.
     deepStrictEqual(requests.slice(start), [
-      { url: "/api/inspect", body: "" },
       { url: "/other-prefix/other-suffix/v7/call/subtract", body: '{"a":11,"b":4}' },
       { url: "/other-prefix/other-suffix/v7/call/subtract", body: '{"a":12,"b":2}' }
     ]);
