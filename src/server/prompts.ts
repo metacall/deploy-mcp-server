@@ -36,7 +36,7 @@ export function getPrompt(name: string, args: Record<string, string> = {}): GetP
   const text = name === "deploy-project" ? [
     `Deploy the local project at ${JSON.stringify(args.projectPath)} using upload with projectPath and name ${JSON.stringify(args.name)}.`,
     'Use upload\'s returned packageId as deploy\'s name with resourceType "Package". Ask for required plan, release and version if missing; follow deploy\'s prerequisites without assuming a plan.',
-    "Wait for deploy to report ready; use inspectByName with the returned suffix if confirmation is needed."
+    'Wait for deploy to report status "ready". A deploy returning status "create" is still building, not failed: poll inspectByName with the returned suffix until it reports ready, and do not deploy the package again.'
   ].join("\n") : [
     `Invoke function ${JSON.stringify(args.function)}.`,
     args.suffix !== undefined

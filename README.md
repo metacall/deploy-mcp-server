@@ -109,7 +109,7 @@ Every tool carries MCP annotations so clients can decide what to confirm: `valid
 | `inspect` | — | List deployments and exported functions. |
 | `inspectByName` | `suffix` | Inspect and select a deployment. |
 | `upload` | `name`, exactly one of `projectPath` / `zipPath` / `zipBase64`, `jsons?`, `runners?` | Upload a package. |
-| `deploy` | `name`, `plan`, `resourceType`, `release`, `version`, `env?` | Deploy and wait for readiness. |
+| `deploy` | `name`, `plan`, `resourceType`, `release`, `version`, `env?`, `waitSeconds?` | Deploy and wait for readiness. |
 | `add` | `url`, `branch`, `jsons?` | Register a Git repository. |
 | `deployDelete` | `suffix`, `version?` | Delete a deployment and its package. |
 | `branchList` | `url` | List repository branches. |
@@ -118,9 +118,11 @@ Every tool carries MCP annotations so clients can decide what to confirm: `valid
 | `await` | `function`, `suffix?`, `args?` | Invoke an async function on cloud. |
 | `logs` | `suffix`, `container` | Read cloud runtime logs. |
 
-For `deploy`, `resourceType` is `Package` or `Repository` and `plan` is `Essential`, `Standard` or `Premium`. Use the `packageId` returned by `upload` or the `repositoryId` returned by `add` as `name`. `release` is a deployment release identifier, not a Git branch. Cloud deployments require an available subscription plan; check `inspect` and `listSubscriptions` first. `env` defaults to `[]` and contains `{ "name": "KEY", "value": "value" }` entries. `deployDelete.version` defaults to `v1`.
+For `deploy`, `resourceType` is `Package` or `Repository` and `plan` is `Essential`, `Standard` or `Premium`. Use the `packageId` returned by `upload` or the `repositoryId` returned by `add` as `name`. `release` is a deployment release identifier, not a Git branch. Cloud deployments require an available subscription plan; check `inspect` and `listSubscriptions` first. `env` defaults to `[]` and contains `{ "name": "KEY", "value": "value" }` entries. `waitSeconds` bounds how long the call waits for readiness and defaults to `30`, with a ceiling of `45`; status is checked every 5 seconds, so the wait is rounded down to that interval, and the ceiling leaves the checks room under the MCP SDK's 60s default request timeout. `deployDelete.version` defaults to `v1`.
 
 > **Temporary limitation:** `@metacall/protocol` 0.1.35 sends `listSubscriptionsDeploys` to the subscription list endpoint, so it currently returns subscription plan entries rather than deployment associations. This is fixed upstream in [metacall/protocol#61](https://github.com/metacall/protocol/pull/61) but not yet released.
+
+`deploy` returns `status: "ready"` once the deployment is live. A deployment still building when `waitSeconds` elapses returns `status: "create"` instead: that is a result, not a failure, so poll `inspectByName` with the returned suffix rather than deploying again. Only a deployment reported as failed, or a lookup that never saw the deployment at all, is raised as an error.
 
 `inspectByName` reports `found: false` only when the account has no deployment with that suffix; request, authentication and transport failures are raised as errors instead.
 
@@ -219,6 +221,10 @@ docker stop mcp-faas-e2e
 ## Authentication behavior
 
 `METACALL_TOKEN` seeds cloud authentication at startup. Before API requests, the server proactively refreshes a still-valid token nearing expiry. The renewed token stays in memory and serves subsequent tools and API-backed resource reads. It is never returned to the MCP client, written to disk or written back to `process.env.METACALL_TOKEN` or client configuration. Restarting uses the original configured token again. Recovery from a fully expired startup token is not guaranteed by upstream refresh semantics.
+
+## Deployment lookups
+
+The API has no lookup-by-suffix endpoint: `@metacall/protocol` resolves a suffix by downloading the full deployment listing. The server fetches that listing once per burst instead of once per lookup. Concurrent lookups share a single request, and a lookup reuses a listing fetched in the last five seconds, so a `call`, `logs` or `deployDelete` that follows an `inspectByName` costs no extra request. A completed delete drops the held listing. `deploy` readiness polling, the `inspect` tool and the `metacall://deployments` resources always read fresh.
 
 ## Development
 

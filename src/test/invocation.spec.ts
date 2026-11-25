@@ -38,7 +38,12 @@ describe("Unit Invocation", () => {
   const originalToken = process.env.METACALL_TOKEN;
   const originalBaseURL = process.env.METACALL_BASE_URL;
   let tools: MCPToolDefinition[];
+  let invalidateDeployments: () => void;
   let invocationStatus: number;
+  let heldInspect: Promise<void> | undefined;
+
+  const inspects = () =>
+    requests.filter(request => request.url.endsWith("/api/inspect")).length;
 
   const execute = (name: string, args: Record<string, unknown>) =>
     tools.find(tool => tool.name === name)!.execute(args);
@@ -47,11 +52,16 @@ describe("Unit Invocation", () => {
     process.env.METACALL_TOKEN = "invocation-token";
     process.env.METACALL_BASE_URL = "https://dashboard.metacall.io";
     ({ tools } = await import("../server/handlers/index.js"));
+    ({ invalidateDeployments } = await import("../context.js"));
   });
 
   beforeEach(() => {
     requests.length = 0;
     invocationStatus = 200;
+    heldInspect = undefined;
+    // Suffix lookups share one held listing per process; start each case cold
+    // so the request assertions below describe a single tool call.
+    invalidateDeployments();
 
     // Keep legacy axios regressions offline too; protocol uses fetch.
     https.request = () => { throw new Error("Unexpected raw HTTPS request"); };
@@ -61,6 +71,7 @@ describe("Unit Invocation", () => {
       strictEqual(new Headers(init?.headers).get("Authorization"), "jwt invocation-token");
 
       if (url === "https://dashboard.metacall.io/api/inspect") {
+        if (heldInspect) await heldInspect;
         return Response.json(deployments);
       }
 
@@ -103,6 +114,7 @@ describe("Unit Invocation", () => {
     it(`${name} protocol invocation`, async () => {
       for (const args of [{ right: 2, left: 7 }, undefined]) {
         requests.length = 0;
+        invalidateDeployments();
         const result = await execute(name, {
           suffix: "test-suffix",
           function: "subtract",
@@ -139,6 +151,7 @@ describe("Unit Invocation", () => {
   it("missing deployment", async () => {
     for (const name of ["call", "await"]) {
       requests.length = 0;
+      invalidateDeployments();
       await rejects(execute(name, { suffix: "missing", function: "subtract" }), (error: Error) => {
         deepStrictEqual(JSON.parse(error.message), {
           type: "RuntimeError",
@@ -150,6 +163,53 @@ describe("Unit Invocation", () => {
         { url: "https://dashboard.metacall.io/api/inspect", method: "GET", body: undefined }
       ]);
     }
+  });
+
+  it("suffix lookups share one listing", async () => {
+    await execute("inspectByName", { suffix: "test-suffix" });
+    await execute("call", { suffix: "test-suffix", function: "subtract" });
+    await execute("logs", { suffix: "other-suffix", container: "node" });
+
+    strictEqual(inspects(), 1);
+  });
+
+  it("concurrent lookups share one listing request", async () => {
+    let release!: () => void;
+    heldInspect = new Promise<void>(resolve => { release = resolve; });
+
+    const lookups = [
+      execute("call", { suffix: "test-suffix", function: "subtract" }),
+      execute("logs", { suffix: "test-suffix", container: "node" })
+    ];
+    // Both lookups reach the protocol while the listing request is held open.
+    await new Promise(resolve => setImmediate(resolve));
+    release();
+    await Promise.all(lookups);
+
+    strictEqual(inspects(), 1);
+  });
+
+  it("a completed delete drops the held listing", async () => {
+    await execute("inspectByName", { suffix: "test-suffix" });
+    await execute("deployDelete", { suffix: "other-suffix" });
+    strictEqual(inspects(), 1, "the delete resolved its prefix from the held listing");
+
+    await execute("logs", { suffix: "test-suffix", container: "node" });
+    strictEqual(inspects(), 2);
+  });
+
+  it("the held listing expires", async () => {
+    const now = Date.now;
+    try {
+      await execute("inspectByName", { suffix: "test-suffix" });
+      // Past any window a lookup may hold a listing for.
+      Date.now = () => now() + 60_000;
+      await execute("inspectByName", { suffix: "test-suffix" });
+    } finally {
+      Date.now = now;
+    }
+
+    strictEqual(inspects(), 2);
   });
 
   it("function catalog", async () => {

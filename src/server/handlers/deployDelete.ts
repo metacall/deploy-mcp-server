@@ -1,5 +1,5 @@
 import { api } from "../../protocol/client.js";
-import { clearActiveDeployment } from "../../context.js";
+import { clearActiveDeployment, invalidateDeployments, requireDeployment } from "../../context.js";
 import { createToolHandler } from "../toolFactory.js";
 import { DeployDeleteSchema } from "../schemas/deployDelete.schema.js";
 import type { MCPToolDefinition } from "../types.js";
@@ -24,9 +24,12 @@ export const deployDeleteTool: MCPToolDefinition = {
     // The schema defaults version to "v1"; handler args are typed from the schema input.
     async ({ suffix, version = "v1" }) => {
       // Resolve deployment metadata
-      const { prefix } = await api.inspectByName(suffix);
+      const { prefix } = await requireDeployment(suffix);
       // Delete deployment
       const result = await api.deployDelete(prefix, suffix, version);
+      // The completed delete leaves the held listing pointing at a deployment
+      // that is gone; the next lookup must re-fetch.
+      invalidateDeployments();
       clearActiveDeployment(prefix, suffix, version);
       return {
         message: "Deployment deleted successfully",
